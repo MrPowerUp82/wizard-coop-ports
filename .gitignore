@@ -1,0 +1,5 @@
+build*/
+arcana_profile.ini
+*.exe
+*.pdb
+*.o

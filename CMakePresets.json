@@ -1,0 +1,9 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {"name":"headless","generator":"Unix Makefiles","binaryDir":"${sourceDir}/build","cacheVariables":{"CMAKE_BUILD_TYPE":"Release","ARCANA_BUILD_CLIENT":"OFF","ARCANA_BUILD_SERVER":"ON","ARCANA_BUILD_NET":"ON","ARCANA_BUILD_TESTS":"ON"}},
+    {"name":"desktop","generator":"Unix Makefiles","binaryDir":"${sourceDir}/build-desktop","cacheVariables":{"CMAKE_BUILD_TYPE":"Release","ARCANA_BUILD_CLIENT":"ON","ARCANA_BUILD_SERVER":"ON","ARCANA_BUILD_NET":"ON","ARCANA_BUILD_TESTS":"ON"}}
+  ],
+  "buildPresets": [{"name":"headless","configurePreset":"headless"},{"name":"desktop","configurePreset":"desktop"}],
+  "testPresets": [{"name":"headless","configurePreset":"headless","output":{"outputOnFailure":true}}]
+}
