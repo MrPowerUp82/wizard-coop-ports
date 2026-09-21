@@ -50,6 +50,14 @@ foreach ($target in $Targets) {
         $results[$target] = 'ok  dist\vita\arcana-survivors-native.vpk'
       } else { $results[$target] = 'FALHOU' }
     }
+    'psp' {
+      if (Invoke-Container 'pspdev/pspdev' 'tools/docker/psp-build.sh') {
+        if (Test-Path dist\psp) { Remove-Item -Recurse -Force dist\psp }
+        New-Item -ItemType Directory -Force dist\psp | Out-Null
+        Copy-Item -Recurse build-psp\ArcanaSurvivors dist\psp\r
+        $results[$target] = 'ok  dist\psp\ArcanaSurvivors\ (copie para ms0:/PSP/GAME/)'
+      } else { $results[$target] = 'FALHOU' }
+    }
     'psp-probe' {
       if (Invoke-Container 'pspdev/pspdev' 'tools/docker/psp-probe-build.sh') {
         New-Item -ItemType Directory -Force dist\psp-probe | Out-Null
@@ -57,7 +65,7 @@ foreach ($target in $Targets) {
         $results[$target] = 'ok  dist\psp-probe\EBOOT.PBP'
       } else { $results[$target] = 'FALHOU' }
     }
-    default { Write-Host "alvo desconhecido: $target (use host, switch, vita ou psp-probe)" -ForegroundColor Red; exit 2 }
+    default { Write-Host "alvo desconhecido: $target (use host, switch, vita, psp ou psp-probe)" -ForegroundColor Red; exit 2 }
   }
 }
 

@@ -108,7 +108,7 @@ constexpr std::uint32_t kGold = rgba(255, 214, 110);
 
 void meter(BatchRenderer& b, float x, float y, float w, float h, double ratio, std::uint32_t fill) {
   b.rect(x, y, w, h, rgba(4, 6, 12, 220));
-  b.rect(x + 1, y + 1, (w - 2) * static_cast<float>(std::clamp(ratio, 0.0, 1.0)), h - 2, fill);
+  b.rect(x + 1, y + 1, (w - 2) * static_cast<float>(std::clamp<double>(ratio, 0.0, 1.0)), h - 2, fill);
 }
 
 void formatClock(char* out, std::size_t n, double seconds) {
@@ -226,7 +226,7 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
     if (anim_.kills() > 0) sfx(Sound::Kill);
     announce_.age += frameSeconds;
     toast_.age += frameSeconds;
-    hurtFlash_ = std::max(0.0, hurtFlash_ - frameSeconds);
+    hurtFlash_ = std::max<double>(0.0, hurtFlash_ - frameSeconds);
   }
   return true;
 }
@@ -258,7 +258,7 @@ void Frontend::updateTitle() {
   menuIndex_ = std::clamp(menuIndex_, 0, count - 1);
   if (pressed(0, ActUp)) { menuIndex_ = (menuIndex_ + count - 1) % count; sfx(Sound::Click); }
   if (pressed(0, ActDown)) { menuIndex_ = (menuIndex_ + 1) % count; sfx(Sound::Click); }
-  for (int slot = 1; slot < cfg::MAX_PLAYERS; ++slot) {
+  for (int slot = 1; slot < (options_.compact ? 1 : cfg::MAX_PLAYERS); ++slot) {
     if (pressed(slot, ActConfirm) && !joined_[static_cast<std::size_t>(slot)]) {
       joined_[static_cast<std::size_t>(slot)] = true;
       if (characterTaken(slot, character_[static_cast<std::size_t>(slot)])) cycleCharacter(slot, 1, true);
@@ -418,15 +418,15 @@ void Frontend::updatePlaying(double frameSeconds, const InputFrame& input) {
 void Frontend::leashPlayers() {
   // Shared-screen co-op: nobody may leave the view the camera can show at its widest zoom.
   // Half extents match renderWorld()'s minimum zoom (0.55 of a 720p-tall 16:9 view).
-  constexpr double halfW = 1280.0 / (2 * 0.55) - 70, halfH = 720.0 / (2 * 0.55) - 80;
-  double minX = 1e30, maxX = -1e30, minY = 1e30, maxY = -1e30;
+  constexpr real halfW = 1280.0 / (2 * 0.55) - 70, halfH = 720.0 / (2 * 0.55) - 80;
+  real minX = 1e30, maxX = -1e30, minY = 1e30, maxY = -1e30;
   int alive = 0;
   for (const auto& [_, p] : state_.players) {
     minX = std::min(minX, p.x); maxX = std::max(maxX, p.x); minY = std::min(minY, p.y); maxY = std::max(maxY, p.y);
     alive += p.alive ? 1 : 0;
   }
   if (state_.players.size() < 2 || alive == 0) return;
-  const double cx = (minX + maxX) * 0.5, cy = (minY + maxY) * 0.5;
+  const real cx = (minX + maxX) * 0.5, cy = (minY + maxY) * 0.5;
   for (auto& [_, p] : state_.players) {
     p.x = std::clamp(p.x, cx - halfW, cx + halfW);
     p.y = std::clamp(p.y, cy - halfH, cy + halfH);
@@ -521,14 +521,14 @@ void Frontend::render(BatchRenderer& batch, float width, float height) {
 
 void Frontend::renderWorld(BatchRenderer& b, float width, float height) {
   // Shared co-op camera: frame every player (downed ones too, so allies can find and revive them).
-  double minX = 1e30, maxX = -1e30, minY = 1e30, maxY = -1e30;
+  real minX = 1e30, maxX = -1e30, minY = 1e30, maxY = -1e30;
   bool any = false;
   for (const auto& [_, p] : state_.players) {
     minX = std::min(minX, p.x); maxX = std::max(maxX, p.x); minY = std::min(minY, p.y); maxY = std::max(maxY, p.y);
     any = true;
   }
   if (!any) minX = maxX = minY = maxY = 0;
-  const float base = height / 720.0f;
+  const float base = height / 720.0f * (options_.compact ? 1.2f : 1.0f);
   const float want = std::clamp(std::min(width / static_cast<float>(maxX - minX + 560), height / static_cast<float>(maxY - minY + 400)), base * 0.55f, base);
   const float targetX = static_cast<float>((minX + maxX) * 0.5), targetY = static_cast<float>((minY + maxY) * 0.5);
   if (camera_.zoom <= 0) { camera_.zoom = want; camera_.x = targetX; camera_.y = targetY; }
@@ -657,7 +657,7 @@ void Frontend::updateMusic() {
 }
 
 void Frontend::renderFeedback(BatchRenderer& b, float width, float height) {
-  const float s = height / 720.0f;
+  const float s = uiScale(height);
   // Low-health pulse and hurt flash: red gradients creeping in from the screen edges.
   bool low = false;
   for (const auto& [_, p] : state_.players) if (p.alive && p.hp / std::max(1.0, p.maxHp) < 0.3) low = true;
@@ -673,7 +673,7 @@ void Frontend::renderFeedback(BatchRenderer& b, float width, float height) {
   }
   auto drawBanner = [&](const Banner& banner, float y, float px) {
     if (banner.age >= banner.life || banner.text.empty()) return;
-    const float fadeIn = static_cast<float>(std::min(1.0, banner.age / 0.2)), fadeOut = static_cast<float>(std::min(1.0, (banner.life - banner.age) / 0.5));
+    const float fadeIn = static_cast<float>(std::min<double>(1.0, banner.age / 0.2)), fadeOut = static_cast<float>(std::min<double>(1.0, (banner.life - banner.age) / 0.5));
     const float alpha = std::min(fadeIn, fadeOut);
     const float w = b.textWidth(banner.text, px) + 40 * s, h = px * 1.6f;
     const float drop = (1 - fadeIn) * -10 * s;
@@ -686,12 +686,12 @@ void Frontend::renderFeedback(BatchRenderer& b, float width, float height) {
 }
 
 void Frontend::renderHud(BatchRenderer& b, float width, float height) {
-  const float s = height / 720.0f;
+  const float s = uiScale(height);
   const int phase = std::clamp(state_.phase, 0, 5);
   const auto& def = phases()[static_cast<std::size_t>(phase)];
 
-  // Phase + timer, top centre.
-  const float cx = width * 0.5f;
+  // Phase + timer, top centre (top-right on the compact screen, beside player 1's panel).
+  const float cx = options_.compact ? width - 200 * s : width * 0.5f;
   b.rect(cx - 190 * s, 8 * s, 380 * s, 58 * s, kPanel);
   std::snprintf(scratch_, sizeof scratch_, "Fase %d/6 · %s", phase + 1, def.name.c_str());
   b.text(cx, 12 * s, scratch_, 22 * s, accentColor(phase), Align::Center);
@@ -707,7 +707,8 @@ void Frontend::renderHud(BatchRenderer& b, float width, float height) {
   // Boss health bar.
   for (const auto& e : state_.enemies) {
     if (!e.boss || e.hp <= 0) continue;
-    meter(b, cx - 300 * s, 72 * s, 600 * s, 14 * s, e.hp / std::max(1.0, e.maxHp), rgba(235, 80, 90));
+    if (options_.compact) meter(b, 10 * s, 104 * s, width - 20 * s, 12 * s, e.hp / std::max(1.0, e.maxHp), rgba(235, 80, 90));
+    else meter(b, cx - 300 * s, 72 * s, 600 * s, 14 * s, e.hp / std::max(1.0, e.maxHp), rgba(235, 80, 90));
     break;
   }
 
@@ -741,6 +742,7 @@ void Frontend::renderHud(BatchRenderer& b, float width, float height) {
   }
 
   if (state_.phaseStatus == "transition") {
+    const float cx = width * 0.5f;
     b.rect(0, height * 0.38f, width, 90 * s, rgba(0, 0, 0, 150));
     const int next = std::clamp(state_.phase + 1, 0, 5);
     std::snprintf(scratch_, sizeof scratch_, "%s derrotado!", def.bossName.c_str());
@@ -754,16 +756,18 @@ void Frontend::renderChooser(BatchRenderer& b, float width, float height) {
   int slot = 0;
   const Player* p = chooser(&slot);
   if (!p) return;
-  const float s = height / 720.0f;
+  const float s = uiScale(height);
   b.rect(0, 0, width, height, rgba(4, 6, 14, 170));
   std::snprintf(scratch_, sizeof scratch_, "P%d subiu para o nível %d - escolha um poder", slot + 1, p->level);
-  b.text(width * 0.5f, height * 0.16f, scratch_, 30 * s, playerColor(p->color), Align::Center);
+  b.text(width * 0.5f, height * (options_.compact ? 0.08f : 0.16f), scratch_, (options_.compact ? 22 : 30) * s, playerColor(p->color), Align::Center);
 
   const int count = static_cast<int>(p->pendingPowers.size());
-  const float cardW = 300 * s, cardH = 250 * s, gap = 24 * s;
+  const float gap = (options_.compact ? 10 : 24) * s;
+  const float cardW = std::min(300 * s, (width - 20 * s - gap * static_cast<float>(count - 1)) / static_cast<float>(std::max(1, count)));
+  const float cardH = 250 * s;
   const float total = count * cardW + (count - 1) * gap;
   float x = width * 0.5f - total * 0.5f;
-  const float y = height * 0.28f;
+  const float y = height * (options_.compact ? 0.2f : 0.28f);
   for (int i = 0; i < count; ++i, x += cardW + gap) {
     const auto& id = p->pendingPowers[static_cast<std::size_t>(i)];
     const auto it = powerDefs().find(id);
@@ -772,7 +776,7 @@ void Frontend::renderChooser(BatchRenderer& b, float width, float height) {
     b.frame(x, y, cardW, cardH, selected ? 4 * s : 2 * s, selected ? playerColor(p->color) : rgba(70, 76, 110));
     const std::string kind = it == powerDefs().end() ? "" : it->second.kind;
     b.text(x + 16 * s, y + 14 * s, kindLabel(kind), 15 * s, kind == "evolution" ? kGold : kMuted);
-    b.text(x + 16 * s, y + 36 * s, powerTitle(id), 26 * s, kText);
+    b.text(x + 16 * s, y + 36 * s, powerTitle(id), (options_.compact ? 20 : 26) * s, kText);
     const int rank = rankOf(*p, id), max = it == powerDefs().end() ? 1 : it->second.max;
     if (max > 1) {
       for (int r = 0; r < max; ++r)
@@ -785,7 +789,7 @@ void Frontend::renderChooser(BatchRenderer& b, float width, float height) {
 }
 
 void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
-  const float s = height / 720.0f;
+  const float s = uiScale(height);
   b.rect(0, 0, width, height, rgba(10, 10, 22));
   // Slowly drifting sprites behind the menu.
   for (int i = 0; i < 14; ++i) {
@@ -795,10 +799,10 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
     b.icon(static_cast<native::SpriteId>(4 + i % 22), x, y, (60 + (i % 3) * 20) * s, rgba(255, 255, 255, 50));
   }
   b.text(width * 0.5f, height * 0.05f, "ARCANA SURVIVORS", 58 * s, kGold, Align::Center);
-  b.text(width * 0.5f, height * 0.05f + 64 * s, "Sobreviva às hordas, sozinho ou com até 4 arcanistas", 22 * s, kMuted, Align::Center);
+  if (!options_.compact) b.text(width * 0.5f, height * 0.05f + 64 * s, "Sobreviva às hordas, sozinho ou com até 4 arcanistas", 22 * s, kMuted, Align::Center);
 
   const auto items = titleItems();
-  const float mx = width * 0.5f - 260 * s, my = height * 0.25f, step = 48 * s;
+  const float mx = options_.compact ? width - 528 * s : width * 0.5f - 260 * s, my = height * (options_.compact ? 0.19f : 0.25f), step = 48 * s;
   const char* hint = "";
   for (std::size_t i = 0; i < items.size(); ++i) {
     const bool sel = static_cast<int>(i) == menuIndex_;
@@ -808,7 +812,7 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
     const std::uint32_t color = sel ? kText : kMuted;
     const char* value = nullptr;
     switch (items[i]) {
-      case TitleItem::Play: b.text(mx + 20 * s, y + 8 * s, "Jogar", 24 * s, sel ? kGold : kMuted); if (sel) hint = "Começa com os arcanistas prontos abaixo."; break;
+      case TitleItem::Play: b.text(mx + 20 * s, y + 8 * s, "Jogar", 24 * s, sel ? kGold : kMuted); if (sel) hint = options_.compact ? "Começa com o arcanista ao lado." : "Começa com os arcanistas prontos abaixo."; break;
       case TitleItem::Campaign:
         b.text(mx + 20 * s, y + 8 * s, "Ritual", 24 * s, color);
         value = kCampaigns[campaign_].title;
@@ -835,13 +839,15 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
     if (value) b.text(mx + 500 * s, y + 10 * s, value, 20 * s, sel ? kGold : kMuted, Align::Right);
   }
   const float below = my + static_cast<float>(items.size()) * step;
-  b.text(width * 0.5f, below + 4 * s, hint, 18 * s, kMuted, Align::Center);
-  b.text(width * 0.5f, below + 28 * s, "Esquerda/Direita: personagem · A: escolher/entrar · B: sair", 15 * s, rgba(120, 130, 160), Align::Center);
+  const float hx = options_.compact ? mx + 260 * s : width * 0.5f;
+  b.text(hx, below + 4 * s, hint, (options_.compact ? 15 : 18) * s, kMuted, Align::Center);
+  b.text(hx, below + 28 * s, options_.compact ? "Esquerda/Direita: personagem · X: escolher" : "Esquerda/Direita: personagem · A: escolher/entrar · B: sair",
+         15 * s, rgba(120, 130, 160), Align::Center);
 
-  // Join slots.
-  const float cw = 236 * s, ch = 164 * s, sy = height - ch - 10 * s;
-  for (int slot = 0; slot < cfg::MAX_PLAYERS; ++slot) {
-    const float sx = width * 0.5f + (slot - 1.5f) * (cw + 14 * s);
+  // Join slots (compact: only player 1, left of the menu).
+  const float cw = options_.compact ? mx - 20 * s : 236 * s, ch = 164 * s, sy = options_.compact ? my : height - ch - 10 * s;
+  for (int slot = 0; slot < (options_.compact ? 1 : cfg::MAX_PLAYERS); ++slot) {
+    const float sx = options_.compact ? 10 * s + cw / 2 : width * 0.5f + (slot - 1.5f) * (cw + 14 * s);
     const bool in = joined_[static_cast<std::size_t>(slot)];
     const int c = character_[static_cast<std::size_t>(slot)];
     const std::uint32_t color = in ? playerColor(c) : rgba(50, 50, 70);
@@ -867,14 +873,18 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
 }
 
 void Frontend::renderShop(BatchRenderer& b, float width, float height) {
-  const float s = height / 720.0f;
+  const float s = uiScale(height);
   b.rect(0, 0, width, height, rgba(10, 10, 22));
   b.text(width * 0.5f, 16 * s, "Grimório", 44 * s, kGold, Align::Center);
   std::snprintf(scratch_, sizeof scratch_, "%d moedas para gastar", profile_.coins);
   b.text(width * 0.5f, 68 * s, scratch_, 22 * s, kText, Align::Center);
-  const float x = width * 0.5f - 560 * s, w = 1120 * s, rowH = 34 * s, top = 104 * s;
-  for (int i = 0; i < kShopRows; ++i) {
-    const float y = top + i * rowH;
+  const bool compact = options_.compact;
+  const float w = std::min(1120 * s, width - 16 * s), x = width * 0.5f - w * 0.5f, rowH = 34 * s, top = (compact ? 96 : 104) * s;
+  // Compact screens show a window of rows around the selection and the description below.
+  const int visible = compact ? std::max(3, static_cast<int>((height - top - 60 * s) / rowH)) : kShopRows;
+  const int first = std::clamp(shopIndex_ - visible / 2, 0, std::max(0, kShopRows - visible));
+  for (int i = first; i < std::min(kShopRows, first + visible); ++i) {
+    const float y = top + static_cast<float>(i - first) * rowH;
     const bool sel = i == shopIndex_;
     b.rect(x, y, w, rowH - 3 * s, sel ? rgba(40, 44, 80, 240) : rgba(18, 20, 36, 220));
     if (sel) b.frame(x, y, w, rowH - 3 * s, 2 * s, kGold);
@@ -894,7 +904,7 @@ void Frontend::renderShop(BatchRenderer& b, float width, float height) {
     b.text(x + 14 * s, y + 5 * s, up.title, 19 * s, sel ? kText : rgba(205, 212, 235));
     for (int r = 0; r < max; ++r)
       b.rect(x + 200 * s + r * 18 * s, y + 11 * s, 13 * s, 10 * s, r < rank ? kGold : rgba(50, 54, 80));
-    b.text(x + 300 * s, y + 7 * s, up.desc, 16 * s, kMuted);
+    if (!compact) b.text(x + 300 * s, y + 7 * s, up.desc, 16 * s, kMuted);
     if (cost < 0) b.text(x + w - 14 * s, y + 6 * s, "MÁX", 18 * s, rgba(141, 255, 204), Align::Right);
     else {
       std::snprintf(scratch_, sizeof scratch_, "%d", cost);
@@ -902,12 +912,18 @@ void Frontend::renderShop(BatchRenderer& b, float width, float height) {
       b.text(x + w - 36 * s, y + 6 * s, scratch_, 18 * s, affordable ? kGold : rgba(150, 110, 110), Align::Right);
     }
   }
-  b.text(width * 0.5f, top + kShopRows * rowH + 8 * s, "A: comprar · B: voltar · as melhorias valem para todos os jogadores", 16 * s, rgba(120, 130, 160), Align::Center);
+  if (compact) {
+    const float by = top + static_cast<float>(visible) * rowH + 4 * s;
+    if (shopIndex_ < kShopRows - 1) b.text(width * 0.5f, by, kUpgrades[shopIndex_].desc, 17 * s, kText, Align::Center);
+    b.text(width * 0.5f, by + 24 * s, "X: comprar · O: voltar", 15 * s, rgba(120, 130, 160), Align::Center);
+  } else {
+    b.text(width * 0.5f, top + kShopRows * rowH + 8 * s, "A: comprar · B: voltar · as melhorias valem para todos os jogadores", 16 * s, rgba(120, 130, 160), Align::Center);
+  }
   renderFeedback(b, width, height);
 }
 
 void Frontend::renderPause(BatchRenderer& b, float width, float height) {
-  const float s = height / 720.0f;
+  const float s = uiScale(height);
   b.rect(0, 0, width, height, rgba(0, 0, 0, 160));
   b.text(width * 0.5f, height * 0.25f, "Pausado", 52 * s, kText, Align::Center);
   const char* items[4] = {"Continuar", "Reiniciar ritual", audio_ && audio_->muted() ? "Som: desligado" : "Som: ligado", "Menu principal"};
@@ -921,7 +937,7 @@ void Frontend::renderPause(BatchRenderer& b, float width, float height) {
 }
 
 void Frontend::renderOver(BatchRenderer& b, float width, float height) {
-  const float s = height / 720.0f;
+  const float s = uiScale(height);
   b.rect(0, 0, width, height, rgba(0, 0, 0, 180));
   b.text(width * 0.5f, height * 0.22f, state_.victory ? "Vitória!" : "Derrota", 60 * s, state_.victory ? kGold : rgba(255, 110, 110), Align::Center);
   char clock[16];
@@ -945,7 +961,7 @@ void Frontend::renderOver(BatchRenderer& b, float width, float height) {
 }
 
 void Frontend::renderPerf(BatchRenderer& b, float width, float height) {
-  const float s = height / 720.0f;
+  const float s = uiScale(height);
   const auto st = lastBatch_;
   std::snprintf(scratch_, sizeof scratch_, "%.0f fps  frame %.2fms  sim %.2fms (%d)  mundo %.2fms  draw %d/%dv  E%d S%d D%d",
                 fps_, timings_.frameMs, timings_.updateMs, timings_.steps, buildMs_, st.drawCalls, st.vertices,

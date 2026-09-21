@@ -53,13 +53,19 @@ for target in "${TARGETS[@]}"; do
         RESULT[$target]="ok  dist/vita/arcana-survivors-native.vpk"
       else RESULT[$target]="FALHOU"; fi
       ;;
+    psp)
+      if run pspdev/pspdev tools/docker/psp-build.sh; then
+        rm -rf dist/psp && mkdir -p dist/psp && cp -r build-psp/ArcanaSurvivors dist/psp/
+        RESULT[$target]="ok  dist/psp/ArcanaSurvivors/ (copie para ms0:/PSP/GAME/)"
+      else RESULT[$target]="FALHOU"; fi
+      ;;
     psp-probe)
       if run pspdev/pspdev tools/docker/psp-probe-build.sh; then
         mkdir -p dist/psp-probe && cp build-psp-probe/EBOOT.PBP dist/psp-probe/
         RESULT[$target]="ok  dist/psp-probe/EBOOT.PBP"
       else RESULT[$target]="FALHOU"; fi
       ;;
-    *) echo "alvo desconhecido: $target (use host, switch, vita ou psp-probe)"; exit 2 ;;
+    *) echo "alvo desconhecido: $target (use host, switch, vita, psp ou psp-probe)"; exit 2 ;;
   esac
 done
 

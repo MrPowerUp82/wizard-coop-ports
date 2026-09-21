@@ -27,7 +27,9 @@ public:
   static constexpr int kSampleRate = 48000;
 
   // Opens the default output device. Returns false (and stays silent) when there is none.
-  bool init();
+  // Slow CPUs (PSP) synthesize at 22050 Hz: half the work, still clean for these chiptune voices.
+  bool init(int sampleRate = kSampleRate);
+  [[nodiscard]] int sampleRate() const { return static_cast<int>(sr_); }
   void shutdown();
 
   void play(Sound sound);
@@ -36,7 +38,7 @@ public:
   [[nodiscard]] bool muted() const { return muted_; }
 
   // Offline rendering (tests / --audio-demo): no device, the caller pulls mono float samples.
-  void initOffline();
+  void initOffline(int sampleRate = kSampleRate);
   void render(float* out, int frames);
   void pumpCommands();
 
@@ -62,7 +64,7 @@ private:
     Filter filter{};
     bool music{};
     std::int64_t start{}, end{};
-    double phase{};
+    float phase{};  // float on purpose: the PSP has no double FPU, and [0,1) needs no more
     float freq{}, freqMul{1};
     int freqSamples{};
     float gain{}, gainMulA{1}, gainMulB{1};
@@ -91,6 +93,7 @@ private:
   SDL_AudioSpec spec_{};
   bool offline_{};
   bool muted_{};
+  float sr_{static_cast<float>(kSampleRate)};
   std::array<Voice, 72> voices_{};
   std::int64_t clock_{};   // samples rendered so far (audio thread)
   std::uint32_t noiseState_{0x12345678u};

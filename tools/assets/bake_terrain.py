@@ -103,3 +103,7 @@ for phase in range(6):
     sheet.paste(bake(phase), (phase * T, 0))
 sheet.save(OUT, optimize=True)
 print(f'wrote {OUT} {sheet.width}x{sheet.height}')
+# PSP: 64 px tiles so the floor fits its single 512x512 texture page.
+small = sheet.resize((sheet.width // 4, sheet.height // 4), Image.Resampling.LANCZOS)
+small.save(OUT.with_name('terrain_tiles_64.png'), optimize=True)
+print(f'wrote terrain_tiles_64.png {small.width}x{small.height}')

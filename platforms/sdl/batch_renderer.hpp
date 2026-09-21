@@ -32,7 +32,10 @@ public:
 
   // `atlas`: sprites in a grid of `cell` squares, `cols` per row, in SpriteId order.
   // `terrain`: optional strip of square floor tiles (one per phase), may be null.
-  bool init(SDL_Renderer* renderer, SDL_Surface* atlas, int cell, int cols, SDL_Surface* terrain, TTF_Font* font, std::string& error);
+  // `compact`: one 512x512 page for GPUs with that texture limit (PSP): expects a 384x384 atlas
+  // (64 px cells) and 64 px floor tiles, and drops the hit-flash silhouettes (flashes tint instead).
+  bool init(SDL_Renderer* renderer, SDL_Surface* atlas, int cell, int cols, SDL_Surface* terrain, TTF_Font* font, std::string& error,
+            bool compact = false);
   void shutdown();
 
   void begin();
@@ -99,6 +102,7 @@ private:
   std::array<UvRect, static_cast<std::size_t>(native::SpriteId::Count)> silhouettes_{};
   std::array<UvRect, 8> terrain_{};
   int terrainCount_{};
+  bool hasSilhouettes_{true};
   UvRect glow_{};
   std::array<Glyph, 256> glyphs_{};
   UvRect white_{};

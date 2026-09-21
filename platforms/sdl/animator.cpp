@@ -1,4 +1,5 @@
 #include "animator.hpp"
+#include "fastmath.hpp"
 #include "arcana/data.hpp"
 
 #include <algorithm>
@@ -96,11 +97,12 @@ Effect* Animator::push(FxKind kind, float x, float y, float life, bool major) {
 void Animator::burst(float x, float y, std::uint32_t color, int count, float radius) {
   if (Effect* ring = push(FxKind::Ring, x, y, 0.45f)) { ring->color = color; ring->radius = radius; }
   for (int i = 0; i < count; ++i) {
-    const float angle = TAU * static_cast<float>(i) / static_cast<float>(count);
+    float sa, ca;
+    fastSinCos(TAU * static_cast<float>(i) / static_cast<float>(count), sa, ca);
     if (Effect* s = push(FxKind::Spark, x, y, 0.3f + static_cast<float>(i % 3) * 0.1f)) {
       s->color = color;
-      s->vx = std::cos(angle) * (35 + static_cast<float>(i % 3) * 18);
-      s->vy = std::sin(angle) * 65 - 18;
+      s->vx = ca * (35 + static_cast<float>(i % 3) * 18);
+      s->vy = sa * 65 - 18;
     }
   }
 }
@@ -352,7 +354,7 @@ void Animator::track(const GameState& game, const Player* player, const Enemy* e
 void Animator::update(const GameState& game, double dtIn, bool paused) {
   hits_ = kills_ = 0;
   if (paused) return;
-  const float dt = static_cast<float>(std::clamp(dtIn, 0.0, 0.05));
+  const float dt = static_cast<float>(std::clamp<double>(dtIn, 0.0, 0.05));
   if (freeze_ > 0) { freeze_ -= dt; return; }
   time_ += dt;
   shake_ = std::max(0.0f, shake_ - dt * 28);
@@ -431,10 +433,10 @@ Pose Animator::pose(std::uint64_t key) const {
   Pose out;
   if (!a) return out;
   const float down = a->down;
-  const float step = std::sin(a->stride + a->seed) * a->walking * (1 - down);
-  const float breath = std::sin(time_ * 2.8f + a->seed) * (1 - down);
-  const float bounce = a->floating ? std::sin(time_ * 3.5f + a->seed) * 4 : -std::abs(step) * (a->boss ? 2.0f : 3.5f);
-  out.x = -std::cos(a->castAngle) * a->cast * 3;
+  const float step = fastSin(a->stride + a->seed) * a->walking * (1 - down);
+  const float breath = fastSin(time_ * 2.8f + a->seed) * (1 - down);
+  const float bounce = a->floating ? fastSin(time_ * 3.5f + a->seed) * 4 : -std::abs(step) * (a->boss ? 2.0f : 3.5f);
+  out.x = -fastCos(a->castAngle) * a->cast * 3;
   out.y = bounce + breath * 0.7f + down * 12;
   out.rotation = step * (a->boss ? 0.015f : 0.045f) + a->dx * a->walking * 0.025f + down * 0.65f - a->cast * 0.07f;
   out.sx = a->facing * (1 + breath * 0.015f + std::abs(step) * 0.025f + a->cast * 0.06f + a->hit * 0.1f);

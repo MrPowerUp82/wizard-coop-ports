@@ -38,6 +38,7 @@ struct FrontendOptions {
   int autoplayPlayers{1};
   std::string campaign{"quick"};
   bool startImmediately{};
+  bool compact{};      // small single-player screen (PSP 480x272): bigger UI, reflowed layouts
   bool openShop{};     // dev/screenshots: start on the Grimório
   bool debugCharge{};   // autoplay: specials always charged (effects soak test)
 };
@@ -76,6 +77,7 @@ private:
 
   void startRun();
   void updateTitle();
+  float uiScale(float height) const { return height / 720.0f * (options_.compact ? 1.7f : 1.0f); }
   void updateShop();
   void renderShop(BatchRenderer& batch, float width, float height);
   native::StaticVector<TitleItem, 6> titleItems() const;
