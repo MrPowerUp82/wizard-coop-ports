@@ -55,6 +55,7 @@ NOTES="$OUT/RELEASE_NOTES.md"
   echo "| Arquivo | Tamanho | SHA-256 |"
   echo "|---|---|---|"
   while read -r hash file; do
+    file="${file#*}" # sha256sum on Windows marks binary mode with a leading "*"
     size=$(stat -c %s "$OUT/$file")
     printf '| `%s` | %s KB | `%s` |\n' "$file" "$(( (size + 1023) / 1024 ))" "$hash"
   done < "$OUT/SHA256SUMS.txt"
