@@ -9,6 +9,7 @@
 #include <SDL_image.h>
 #include <SDL_ttf.h>
 #include <switch.h>
+#include <sys/stat.h>
 
 #include <algorithm>
 #include <chrono>
@@ -155,6 +156,9 @@ int main(int argc, char** argv) {
   appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
 
   auto frontend = std::make_unique<Frontend>(); // GameState is large: keep it off the main thread stack
+  // Save next to the .nro's usual home; the SD card survives reinstalls of the homebrew.
+  mkdir("sdmc:/switch/arcana-survivors", 0777);
+  frontend->setProfilePath("sdmc:/switch/arcana-survivors/profile.ini");
   static Audio audio; // synth state lives for the whole process
   if (audio.init()) frontend->setAudio(&audio);
   InputFrame input;

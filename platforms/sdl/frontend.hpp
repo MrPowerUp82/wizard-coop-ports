@@ -1,6 +1,7 @@
 #pragma once
 
 #include "arcana/game.hpp"
+#include "arcana/profile.hpp"
 #include "arcana/native/fixed_step.hpp"
 #include "arcana/native/render_queue.hpp"
 #include "animator.hpp"
@@ -37,6 +38,7 @@ struct FrontendOptions {
   int autoplayPlayers{1};
   std::string campaign{"quick"};
   bool startImmediately{};
+  bool openShop{};     // dev/screenshots: start on the Grimório
   bool debugCharge{};   // autoplay: specials always charged (effects soak test)
 };
 
@@ -53,13 +55,18 @@ public:
   // CPU time of the whole previous frame (update + render build), for the perf overlay.
   void setFrameMs(double ms) { timings_.frameMs = ms; }
   // Optional: without it the game is silent.
-  void setAudio(Audio* audio) { audio_ = audio; }
+  void setAudio(Audio* audio);
+  // Where the Grimório (coins, upgrades) and menu choices persist. Without it nothing is saved.
+  void setProfilePath(std::string path);
+  [[nodiscard]] const Profile& profile() const { return profile_; }
   [[nodiscard]] const GameState& state() const { return state_; }
+  GameState& stateForTests() { return state_; }
   [[nodiscard]] bool inGame() const { return screen_ == Screen::Playing || screen_ == Screen::Paused; }
   [[nodiscard]] double buildMs() const { return buildMs_; }
 
 private:
-  enum class Screen { Title, Playing, Paused, Over };
+  enum class Screen { Title, Playing, Paused, Over, Shop };
+  enum class TitleItem : std::uint8_t { Play, Campaign, Weapon, Special, Shop, Quit };
 
   struct PadEdges { std::uint32_t pressed{}, held{}; };
 
@@ -69,6 +76,13 @@ private:
 
   void startRun();
   void updateTitle();
+  void updateShop();
+  void renderShop(BatchRenderer& batch, float width, float height);
+  native::StaticVector<TitleItem, 6> titleItems() const;
+  bool unlocked(const char* id) const;
+  void depositRun();
+  void saveProfileNow();
+  void cycleCampaign();
   bool characterTaken(int slot, int character) const;
   void cycleCharacter(int slot, int direction, bool includeCurrent = false);
   void updatePlaying(double frameSeconds, const InputFrame& input);
@@ -117,6 +131,16 @@ private:
   std::array<bool, cfg::MAX_PLAYERS> joined_{true, false, false, false};
   // Character (spell element / sprite) chosen by each slot; joined slots never share one.
   std::array<int, cfg::MAX_PLAYERS> character_{0, 1, 2, 3};
+  Profile profile_{};
+  std::string profilePath_;
+  int campaign_{0};         // index into kCampaigns
+  std::string weapon_;       // Arsenal loadout (P1), empty = normal draw
+  int special_{};            // Segundo feitiço loadout (P1)
+  bool deposited_{};
+  int earned_{};
+  int shopIndex_{};
+  bool respecArmed_{};
+  bool quitRequested_{};
   int menuIndex_{0}, pauseIndex_{0}, choiceIndex_{0};
   std::string choiceKey_;
   double menuTime_{}, overTime_{};

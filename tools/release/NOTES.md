@@ -1,5 +1,12 @@
 Primeira versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch** e **PS Vita**. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
 
+## Novidades da v0.6.0
+
+- **Grimório (meta-progressão):** as moedas de cada partida ficam guardadas e compram os 15 upgrades permanentes do jogo web, entre eles Vigor, Potência, Canalização, Fênix, Pacto familiar e os desbloqueios Arsenal, Segundo feitiço e Ritual infinito. Também dá para redistribuir tudo e receber as moedas de volta.
+- **Save por console:** Grimório, personagens escolhidos, ritual, arma inicial, especial e som ficam salvos. Os arquivos ficam em `sdmc:/switch/arcana-survivors/profile.ini` no Switch e em `ux0:data/arcana-survivors/profile.ini` no Vita. A gravação é atômica, então um crash ou uma queda de energia não corrompe o save.
+- **Seleção de personagem:** Azul, Vermelho, Verde ou Roxo para cada jogador, sem repetir no co-op.
+- **Loadout:** com Arsenal, o jogador 1 escolhe a arma inicial; com Segundo feitiço, o especial alternativo.
+
 ## Destaques
 
 - **Sem JavaScript no gameplay.** A simulação (hordas, 6 fases, chefes, poderes, evoluções, combos, encontros, maldições, co-op com reviver) roda em C++20. Os containers têm capacidade fixa e o hot path não aloca memória depois do aquecimento.
@@ -30,7 +37,7 @@ Primeira versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) par
 
 ## Limitações conhecidas
 
-- Ainda faltam a meta-progressão (loja, Códex, grimório, salvamento por console) e o multiplayer online.
+- Ainda faltam o Códex, o desafio diário, as maldições e o multiplayer online.
 - A orientação do analógico de um Joy-Con sozinho na horizontal ainda não foi validada em todos os firmwares. Se ele girar errado, avise na issue.
 - O volume segue o do navegador, que é baixo por projeto.
 

@@ -23,7 +23,28 @@ constexpr CampaignEntry kCampaigns[] = {
   {"classic", "Ritual clássico", "6 fases de 5 minutos, progressão mais lenta."},
   {"endless", "Ritual infinito", "As fases se repetem cada vez mais difíceis."},
 };
-constexpr int kTitleItems = 4; // campaigns + quit
+// server/meta.js META_UPGRADES (costs live in src/profile.cpp).
+struct UpgradeText { const char* id; const char* title; const char* desc; };
+constexpr UpgradeText kUpgrades[] = {
+  {"vigor", "Vigor", "+6 de vida máxima por grau (até +30)"},
+  {"might", "Potência", "+3% de dano por grau (até +15%)"},
+  {"celerity", "Celeridade", "Ataques 3% mais rápidos por grau (até 12%)"},
+  {"stride", "Agilidade", "+4% de velocidade de movimento por grau (até +12%)"},
+  {"ward", "Égide", "+0,5 de armadura por grau (até +2)"},
+  {"reach", "Alcance", "+15 de raio de coleta por grau (até +45)"},
+  {"wisdom", "Sabedoria", "+3% de experiência por grau (até +15%)"},
+  {"greed", "Ganância", "+10% de moedas por grau (até +30%)"},
+  {"channel", "Canalização", "Começa com +20% de carga especial por grau (até 60%)"},
+  {"reroll", "Destino", "+1 troca de poderes por partida"},
+  {"pact", "Pacto familiar", "Começa a partida com um Familiar arcano invocado"},
+  {"phoenix", "Fênix", "Renasce uma vez por partida com 50% da vida"},
+  {"arsenal", "Arsenal", "Desbloqueio: escolha a arma inicial antes da partida"},
+  {"secondSpell", "Segundo feitiço", "Desbloqueio: um especial alternativo para cada personagem"},
+  {"endless", "Ritual infinito", "Desbloqueio: os seis reinos se repetem cada vez mais difíceis"},
+};
+constexpr int kShopRows = static_cast<int>(std::size(kUpgrades)) + 1; // + respec
+constexpr const char* kStartingWeapons[] = {"orbit", "aura", "chain", "runes", "familiar"};
+constexpr const char* kAltSpecials[4] = {"Tempestade de granizo", "Égide flamejante", "Florescer", "Eclipse"};
 
 // src/menu.js characterNames/characterEffects and server/weapons.js SPECIALS.
 constexpr const char* kCharacterNames[4] = {"Azul", "Vermelho", "Verde", "Roxo"};
@@ -101,8 +122,9 @@ Frontend::Frontend(FrontendOptions options) : options_(std::move(options)) {
   if (options_.autoplay) {
     for (int i = 0; i < cfg::MAX_PLAYERS; ++i) joined_[static_cast<std::size_t>(i)] = i < std::clamp(options_.autoplayPlayers, 1, cfg::MAX_PLAYERS);
   }
-  for (int i = 0; i < 3; ++i) if (options_.campaign == kCampaigns[i].id) menuIndex_ = i;
+  for (int i = 0; i < 3; ++i) if (options_.campaign == kCampaigns[i].id) campaign_ = i;
   if (options_.startImmediately || options_.autoplay) startRun();
+  else if (options_.openShop) screen_ = Screen::Shop;
 }
 
 bool Frontend::anyPressed(Action a) const {
@@ -142,11 +164,14 @@ void Frontend::startRun() {
   // Rebuild in place: GameState is ~200 KB and an assignment from a temporary would put a second
   // copy on the (small, on Vita) main-thread stack. Prvalue + placement new is guaranteed elision.
   state_.~GameState();
-  new (&state_) GameState(createGameState(kCampaigns[std::clamp(menuIndex_, 0, 2)].id));
+  depositRun(); // leaving a run early (restart) still banks its coins
+  new (&state_) GameState(createGameState(kCampaigns[std::clamp(campaign_, 0, 2)].id));
+  // Permanent upgrades apply to everyone; the loadout is player 1's, as in the web client.
+  const Loadout loadout{weapon_, special_};
   static constexpr const char* names[4] = {"Arcanista 1", "Arcanista 2", "Arcanista 3", "Arcanista 4"};
   for (int slot = 0; slot < cfg::MAX_PLAYERS; ++slot) {
     if (!joined_[static_cast<std::size_t>(slot)]) continue;
-    Player p = createPlayer(kIds[slot], names[slot], character_[static_cast<std::size_t>(slot)]);
+    Player p = createPlayer(kIds[slot], names[slot], character_[static_cast<std::size_t>(slot)], &profile_.upgrades, slot == 0 ? &loadout : nullptr);
     p.x = (slot % 2 ? 60 : -60) * (slot > 0 ? 1 : 0);
     p.y = (slot >= 2 ? 60 : 0);
     state_.players[p.id] = std::move(p);
@@ -164,6 +189,13 @@ void Frontend::startRun() {
   sampled_ = {};
   hazardCount_ = 0;
   overSoundPlayed_ = false;
+  deposited_ = false;
+  earned_ = 0;
+  profile_.prefs.characters = character_;
+  profile_.prefs.campaign = kCampaigns[std::clamp(campaign_, 0, 2)].id;
+  profile_.prefs.weapon = weapon_;
+  profile_.prefs.special = special_;
+  saveProfileNow();
   screen_ = Screen::Playing;
 }
 
@@ -179,14 +211,15 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
   switch (screen_) {
     case Screen::Title:
       updateTitle();
-      if (screen_ == Screen::Title && menuIndex_ == kTitleItems - 1 && pressed(0, ActConfirm)) return false;
+      if (quitRequested_) return false;
       break;
+    case Screen::Shop: updateShop(); announce_.age += frameSeconds; toast_.age += frameSeconds; break;
     case Screen::Playing: updatePlaying(frameSeconds, input); break;
     case Screen::Paused: updatePaused(); break;
     case Screen::Over: updateOver(); break;
   }
   updateMusic();
-  if (screen_ != Screen::Title) {
+  if (screen_ != Screen::Title && screen_ != Screen::Shop) {
     // Animation time stops while paused or choosing a power, exactly like the web client.
     anim_.update(state_, frameSeconds, screen_ == Screen::Paused || (screen_ == Screen::Playing && chooser()));
     if (anim_.hits() > 0) sfx(Sound::Hit);
@@ -198,9 +231,33 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
   return true;
 }
 
+native::StaticVector<Frontend::TitleItem, 6> Frontend::titleItems() const {
+  native::StaticVector<TitleItem, 6> items;
+  items.push_back(TitleItem::Play);
+  items.push_back(TitleItem::Campaign);
+  if (unlocked("arsenal")) items.push_back(TitleItem::Weapon);
+  if (unlocked("secondSpell")) items.push_back(TitleItem::Special);
+  items.push_back(TitleItem::Shop);
+  items.push_back(TitleItem::Quit);
+  return items;
+}
+
+bool Frontend::unlocked(const char* id) const {
+  const auto it = profile_.upgrades.rank.find(id);
+  return it != profile_.upgrades.rank.end() && it->second > 0;
+}
+
+void Frontend::cycleCampaign() {
+  // The endless ritual is sold in the Grimório (server/meta.js `endless` unlock).
+  do campaign_ = (campaign_ + 1) % 3; while (campaign_ == 2 && !unlocked("endless"));
+}
+
 void Frontend::updateTitle() {
-  if (pressed(0, ActUp)) { menuIndex_ = (menuIndex_ + kTitleItems - 1) % kTitleItems; sfx(Sound::Click); }
-  if (pressed(0, ActDown)) { menuIndex_ = (menuIndex_ + 1) % kTitleItems; sfx(Sound::Click); }
+  const auto items = titleItems();
+  const int count = static_cast<int>(items.size());
+  menuIndex_ = std::clamp(menuIndex_, 0, count - 1);
+  if (pressed(0, ActUp)) { menuIndex_ = (menuIndex_ + count - 1) % count; sfx(Sound::Click); }
+  if (pressed(0, ActDown)) { menuIndex_ = (menuIndex_ + 1) % count; sfx(Sound::Click); }
   for (int slot = 1; slot < cfg::MAX_PLAYERS; ++slot) {
     if (pressed(slot, ActConfirm) && !joined_[static_cast<std::size_t>(slot)]) {
       joined_[static_cast<std::size_t>(slot)] = true;
@@ -213,7 +270,89 @@ void Frontend::updateTitle() {
   }
   if (pressed(0, ActLeft)) cycleCharacter(0, -1);
   if (pressed(0, ActRight)) cycleCharacter(0, 1);
-  if (pressed(0, ActConfirm) && menuIndex_ < 3) { sfx(Sound::Click); startRun(); }
+  if (!pressed(0, ActConfirm)) return;
+  sfx(Sound::Click);
+  switch (items[static_cast<std::size_t>(menuIndex_)]) {
+    case TitleItem::Play: startRun(); break;
+    case TitleItem::Campaign: cycleCampaign(); break;
+    case TitleItem::Weapon: {
+      // Nenhuma -> each starting weapon -> Nenhuma.
+      int index = -1;
+      for (int i = 0; i < 5; ++i) if (weapon_ == kStartingWeapons[i]) index = i;
+      weapon_ = index + 1 < 5 ? kStartingWeapons[index + 1] : "";
+      break;
+    }
+    case TitleItem::Special: special_ = 1 - special_; break;
+    case TitleItem::Shop: screen_ = Screen::Shop; shopIndex_ = 0; respecArmed_ = false; break;
+    case TitleItem::Quit: quitRequested_ = true; break;
+  }
+}
+
+void Frontend::updateShop() {
+  if (pressed(0, ActCancel) || pressed(0, ActPause)) { screen_ = Screen::Title; sfx(Sound::Click); return; }
+  if (pressed(0, ActUp)) { shopIndex_ = (shopIndex_ + kShopRows - 1) % kShopRows; respecArmed_ = false; sfx(Sound::Click); }
+  if (pressed(0, ActDown)) { shopIndex_ = (shopIndex_ + 1) % kShopRows; respecArmed_ = false; sfx(Sound::Click); }
+  if (!pressed(0, ActConfirm)) return;
+  if (shopIndex_ == kShopRows - 1) {
+    // Refunds are one press away from wiping every upgrade: ask twice.
+    if (profile_.invested <= 0) { sfx(Sound::Warning); return; }
+    if (!respecArmed_) { respecArmed_ = true; sfx(Sound::Warning); return; }
+    const int refund = respec(profile_);
+    respecArmed_ = false;
+    if (campaign_ == 2) campaign_ = 0;
+    weapon_.clear(); special_ = 0;
+    saveProfileNow();
+    std::snprintf(scratch_, sizeof scratch_, "%d moedas devolvidas ao Grimório", refund);
+    announce(scratch_, kGold, true);
+    sfx(Sound::Coin);
+    return;
+  }
+  if (buyUpgrade(profile_, kUpgrades[shopIndex_].id)) {
+    saveProfileNow();
+    sfx(Sound::Chest);
+  } else {
+    sfx(Sound::Warning);
+  }
+}
+
+void Frontend::depositRun() {
+  // Local players share coins in a run; bank them once (src/main.js depositCoins).
+  if (deposited_ || state_.players.empty() || options_.autoplay) return;
+  deposited_ = true;
+  int coins = 0;
+  for (const auto& [_, p] : state_.players) coins = std::max(coins, p.coins);
+  earned_ = coins;
+  deposit(profile_, coins);
+  observeCodex(profile_, state_, playerForSlot(0));
+  saveProfileNow();
+}
+
+void Frontend::saveProfileNow() {
+  if (!profilePath_.empty()) saveProfileAtomic(profile_, profilePath_);
+}
+
+void Frontend::setProfilePath(std::string path) {
+  profilePath_ = std::move(path);
+  profile_ = loadProfile(profilePath_);
+  const auto& prefs = profile_.prefs;
+  character_ = prefs.characters;
+  // Saves edited by hand (or from older versions) may repeat characters: keep them distinct.
+  for (int slot = 1; slot < cfg::MAX_PLAYERS; ++slot)
+    for (int other = 0; other < slot; ++other)
+      if (character_[static_cast<std::size_t>(other)] == character_[static_cast<std::size_t>(slot)]) {
+        for (int c = 0; c < 4; ++c)
+          if (std::none_of(character_.begin(), character_.begin() + slot, [&](int used) { return used == c; })) { character_[static_cast<std::size_t>(slot)] = c; break; }
+      }
+  for (int i = 0; i < 3; ++i) if (prefs.campaign == kCampaigns[i].id) campaign_ = i;
+  if (campaign_ == 2 && !unlocked("endless")) campaign_ = 0;
+  weapon_ = unlocked("arsenal") ? prefs.weapon : "";
+  special_ = unlocked("secondSpell") ? prefs.special : 0;
+  if (audio_) audio_->setMuted(prefs.muted);
+}
+
+void Frontend::setAudio(Audio* audio) {
+  audio_ = audio;
+  if (audio_ && !profilePath_.empty()) audio_->setMuted(profile_.prefs.muted);
 }
 
 bool Frontend::characterTaken(int slot, int character) const {
@@ -270,7 +409,7 @@ void Frontend::updatePlaying(double frameSeconds, const InputFrame& input) {
 
   if (state_.over) {
     overTime_ += frameSeconds;
-    if (overTime_ > 1.2) { screen_ = Screen::Over; pauseIndex_ = 0; }
+    if (overTime_ > 1.2) { screen_ = Screen::Over; pauseIndex_ = 0; depositRun(); }
   } else {
     overTime_ = 0;
   }
@@ -323,8 +462,10 @@ void Frontend::updatePaused() {
   if (!anyPressed(ActConfirm)) return;
   if (pauseIndex_ == 0) { screen_ = Screen::Playing; clock_.reset(); }
   else if (pauseIndex_ == 1) startRun();
-  else if (pauseIndex_ == 2) { if (audio_) { audio_->setMuted(!audio_->muted()); sfx(Sound::Click); } }
-  else screen_ = Screen::Title;
+  else if (pauseIndex_ == 2) {
+    if (audio_) { audio_->setMuted(!audio_->muted()); profile_.prefs.muted = audio_->muted(); saveProfileNow(); sfx(Sound::Click); }
+  }
+  else { depositRun(); screen_ = Screen::Title; }
 }
 
 void Frontend::updateOver() {
@@ -364,6 +505,8 @@ void Frontend::render(BatchRenderer& batch, float width, float height) {
   batch.begin();
   if (screen_ == Screen::Title) {
     renderTitle(batch, width, height);
+  } else if (screen_ == Screen::Shop) {
+    renderShop(batch, width, height);
   } else {
     renderWorld(batch, width, height);
     renderHud(batch, width, height);
@@ -651,23 +794,52 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
     const float y = height * (0.15f + 0.7f * static_cast<float>(std::fmod(i * 0.37, 1.0))) + static_cast<float>(std::sin(t) * 20 * s);
     b.icon(static_cast<native::SpriteId>(4 + i % 22), x, y, (60 + (i % 3) * 20) * s, rgba(255, 255, 255, 50));
   }
-  b.text(width * 0.5f, height * 0.12f, "ARCANA SURVIVORS", 64 * s, kGold, Align::Center);
-  b.text(width * 0.5f, height * 0.12f + 72 * s, "Sobreviva às hordas, sozinho ou com até 4 arcanistas", 22 * s, kMuted, Align::Center);
+  b.text(width * 0.5f, height * 0.05f, "ARCANA SURVIVORS", 58 * s, kGold, Align::Center);
+  b.text(width * 0.5f, height * 0.05f + 64 * s, "Sobreviva às hordas, sozinho ou com até 4 arcanistas", 22 * s, kMuted, Align::Center);
 
-  const float mx = width * 0.5f - 260 * s, my = height * 0.29f;
-  for (int i = 0; i < kTitleItems; ++i) {
-    const bool sel = i == menuIndex_;
-    const float y = my + i * 62 * s;
-    b.rect(mx, y, 520 * s, 54 * s, sel ? rgba(40, 44, 80, 240) : rgba(18, 20, 36, 220));
-    if (sel) b.frame(mx, y, 520 * s, 54 * s, 3 * s, kGold);
-    const char* title = i < 3 ? kCampaigns[i].title : "Sair";
-    b.text(mx + 20 * s, y + 12 * s, title, 26 * s, sel ? kText : kMuted);
+  const auto items = titleItems();
+  const float mx = width * 0.5f - 260 * s, my = height * 0.25f, step = 48 * s;
+  const char* hint = "";
+  for (std::size_t i = 0; i < items.size(); ++i) {
+    const bool sel = static_cast<int>(i) == menuIndex_;
+    const float y = my + static_cast<float>(i) * step;
+    b.rect(mx, y, 520 * s, 42 * s, sel ? rgba(40, 44, 80, 240) : rgba(18, 20, 36, 220));
+    if (sel) b.frame(mx, y, 520 * s, 42 * s, 3 * s, kGold);
+    const std::uint32_t color = sel ? kText : kMuted;
+    const char* value = nullptr;
+    switch (items[i]) {
+      case TitleItem::Play: b.text(mx + 20 * s, y + 8 * s, "Jogar", 24 * s, sel ? kGold : kMuted); if (sel) hint = "Começa com os arcanistas prontos abaixo."; break;
+      case TitleItem::Campaign:
+        b.text(mx + 20 * s, y + 8 * s, "Ritual", 24 * s, color);
+        value = kCampaigns[campaign_].title;
+        if (sel) hint = unlocked("endless") ? kCampaigns[campaign_].detail : "O Ritual infinito é desbloqueado no Grimório.";
+        break;
+      case TitleItem::Weapon:
+        b.text(mx + 20 * s, y + 8 * s, "Arma inicial", 24 * s, color);
+        value = weapon_.empty() ? "Nenhuma (sorteio normal)" : powerTitle(weapon_);
+        if (sel) hint = "Arsenal: o Jogador 1 começa com esta arma.";
+        break;
+      case TitleItem::Special:
+        b.text(mx + 20 * s, y + 8 * s, "Especial", 24 * s, color);
+        value = special_ ? kAltSpecials[character_[0]] : kCharacterSpecials[character_[0]];
+        if (sel) hint = "Segundo feitiço: especial alternativo do Jogador 1.";
+        break;
+      case TitleItem::Shop:
+        b.text(mx + 20 * s, y + 8 * s, "Grimório", 24 * s, color);
+        std::snprintf(scratch_, sizeof scratch_, "%d moedas", profile_.coins);
+        b.text(mx + 500 * s, y + 10 * s, scratch_, 20 * s, kGold, Align::Right);
+        if (sel) hint = "Melhorias permanentes compradas com as moedas das partidas.";
+        break;
+      case TitleItem::Quit: b.text(mx + 20 * s, y + 8 * s, "Sair", 24 * s, color); break;
+    }
+    if (value) b.text(mx + 500 * s, y + 10 * s, value, 20 * s, sel ? kGold : kMuted, Align::Right);
   }
-  if (menuIndex_ < 3) b.text(width * 0.5f, my + kTitleItems * 62 * s + 6 * s, kCampaigns[menuIndex_].detail, 20 * s, kMuted, Align::Center);
-  b.text(width * 0.5f, my + kTitleItems * 62 * s + 34 * s, "Esquerda/Direita: trocar personagem · A: entrar · B: sair", 16 * s, rgba(120, 130, 160), Align::Center);
+  const float below = my + static_cast<float>(items.size()) * step;
+  b.text(width * 0.5f, below + 4 * s, hint, 18 * s, kMuted, Align::Center);
+  b.text(width * 0.5f, below + 28 * s, "Esquerda/Direita: personagem · A: escolher/entrar · B: sair", 15 * s, rgba(120, 130, 160), Align::Center);
 
   // Join slots.
-  const float cw = 236 * s, ch = 176 * s, sy = height - ch - 12 * s;
+  const float cw = 236 * s, ch = 164 * s, sy = height - ch - 10 * s;
   for (int slot = 0; slot < cfg::MAX_PLAYERS; ++slot) {
     const float sx = width * 0.5f + (slot - 1.5f) * (cw + 14 * s);
     const bool in = joined_[static_cast<std::size_t>(slot)];
@@ -687,11 +859,51 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
     b.icon(static_cast<native::SpriteId>(c), sx, sy + 58 * s + bob, 84 * s);
     b.text(sx - cw / 2 + 14 * s, sy + 44 * s, "<", 26 * s, color);
     b.text(sx + cw / 2 - 14 * s, sy + 44 * s, ">", 26 * s, color, Align::Right);
-    b.text(sx, sy + 102 * s, kCharacterNames[c], 22 * s, color, Align::Center);
-    b.text(sx, sy + 128 * s, kCharacterEffects[c], 14 * s, rgba(205, 212, 235), Align::Center);
-    std::snprintf(scratch_, sizeof scratch_, "Especial: %s", kCharacterSpecials[c]);
-    b.text(sx, sy + 148 * s, scratch_, 14 * s, kMuted, Align::Center);
+    b.text(sx, sy + 96 * s, kCharacterNames[c], 22 * s, color, Align::Center);
+    b.text(sx, sy + 121 * s, kCharacterEffects[c], 14 * s, rgba(205, 212, 235), Align::Center);
+    std::snprintf(scratch_, sizeof scratch_, "Especial: %s", slot == 0 && special_ ? kAltSpecials[c] : kCharacterSpecials[c]);
+    b.text(sx, sy + 140 * s, scratch_, 14 * s, kMuted, Align::Center);
   }
+}
+
+void Frontend::renderShop(BatchRenderer& b, float width, float height) {
+  const float s = height / 720.0f;
+  b.rect(0, 0, width, height, rgba(10, 10, 22));
+  b.text(width * 0.5f, 16 * s, "Grimório", 44 * s, kGold, Align::Center);
+  std::snprintf(scratch_, sizeof scratch_, "%d moedas para gastar", profile_.coins);
+  b.text(width * 0.5f, 68 * s, scratch_, 22 * s, kText, Align::Center);
+  const float x = width * 0.5f - 560 * s, w = 1120 * s, rowH = 34 * s, top = 104 * s;
+  for (int i = 0; i < kShopRows; ++i) {
+    const float y = top + i * rowH;
+    const bool sel = i == shopIndex_;
+    b.rect(x, y, w, rowH - 3 * s, sel ? rgba(40, 44, 80, 240) : rgba(18, 20, 36, 220));
+    if (sel) b.frame(x, y, w, rowH - 3 * s, 2 * s, kGold);
+    if (i == kShopRows - 1) {
+      if (respecArmed_) std::snprintf(scratch_, sizeof scratch_, "Aperte A de novo para devolver %d moedas e zerar as melhorias", profile_.invested);
+      else std::snprintf(scratch_, sizeof scratch_, "Redistribuir melhorias · devolver %d moedas", profile_.invested);
+      b.text(width * 0.5f, y + 6 * s, scratch_, 18 * s, profile_.invested > 0 ? (respecArmed_ ? rgba(255, 140, 120) : kText) : kMuted, Align::Center);
+      continue;
+    }
+    const auto& up = kUpgrades[i];
+    const auto it = profile_.upgrades.rank.find(up.id);
+    const int rank = it == profile_.upgrades.rank.end() ? 0 : it->second;
+    int max = 0;
+    while (nextUpgradeCost(up.id, max) >= 0) ++max;
+    const int cost = nextUpgradeCost(up.id, rank);
+    const bool affordable = cost >= 0 && profile_.coins >= cost;
+    b.text(x + 14 * s, y + 5 * s, up.title, 19 * s, sel ? kText : rgba(205, 212, 235));
+    for (int r = 0; r < max; ++r)
+      b.rect(x + 200 * s + r * 18 * s, y + 11 * s, 13 * s, 10 * s, r < rank ? kGold : rgba(50, 54, 80));
+    b.text(x + 300 * s, y + 7 * s, up.desc, 16 * s, kMuted);
+    if (cost < 0) b.text(x + w - 14 * s, y + 6 * s, "MÁX", 18 * s, rgba(141, 255, 204), Align::Right);
+    else {
+      std::snprintf(scratch_, sizeof scratch_, "%d", cost);
+      b.icon(native::SpriteId::Coin, x + w - 20 * s, y + 15 * s, 22 * s);
+      b.text(x + w - 36 * s, y + 6 * s, scratch_, 18 * s, affordable ? kGold : rgba(150, 110, 110), Align::Right);
+    }
+  }
+  b.text(width * 0.5f, top + kShopRows * rowH + 8 * s, "A: comprar · B: voltar · as melhorias valem para todos os jogadores", 16 * s, rgba(120, 130, 160), Align::Center);
+  renderFeedback(b, width, height);
 }
 
 void Frontend::renderPause(BatchRenderer& b, float width, float height) {
@@ -724,6 +936,10 @@ void Frontend::renderOver(BatchRenderer& b, float width, float height) {
                   static_cast<int>(p->stats.damage), p->coins);
     b.text(width * 0.5f, y, scratch_, 22 * s, playerColor(p->color), Align::Center);
     y += 34 * s;
+  }
+  if (!profilePath_.empty()) {
+    std::snprintf(scratch_, sizeof scratch_, "+%d moedas guardadas no Grimório · total %d", earned_, profile_.coins);
+    b.text(width * 0.5f, height * 0.72f, scratch_, 24 * s, kGold, Align::Center);
   }
   b.text(width * 0.5f, height * 0.8f, "A jogar de novo · B menu principal", 22 * s, kMuted, Align::Center);
 }

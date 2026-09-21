@@ -9,6 +9,7 @@
 #include <psp2/ctrl.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/power.h>
+#include <sys/stat.h>
 
 #include <algorithm>
 #include <cmath>
@@ -91,6 +92,9 @@ int main(int, char**) {
   TTF_CloseFont(font);
 
   auto frontend = std::make_unique<Frontend>();
+  // ux0:data is the conventional homebrew save location; it survives reinstalling the .vpk.
+  mkdir("ux0:data/arcana-survivors", 0777);
+  frontend->setProfilePath("ux0:data/arcana-survivors/profile.ini");
   static Audio audio; // synth state lives for the whole process
   if (audio.init()) frontend->setAudio(&audio);
   InputFrame input;

@@ -28,7 +28,8 @@ struct Args {
   int width{1280}, height{720};
   int frames{-1};         // headless: stop after N frames
   double benchSeconds{};  // headless benchmark with fixed 1/60 frames
-  bool mute{}, forceAudio{};
+  bool mute{}, forceAudio{}, noSave{};
+  std::string profile;    // save file; default: the OS per-user data folder
   std::string audioDemo;  // render every sound and music mood to a WAV file and exit
   int shotsEvery{};       // headless: also save <screenshot>-NNNN.png every N frames
 };
@@ -42,7 +43,10 @@ Args parseArgs(int argc, char** argv) {
     else if (k == "--perf") a.frontend.showPerf = true;
     else if (k == "--charged") a.frontend.debugCharge = true;
     else if (k == "--mute") a.mute = true;
-    else if (k == "--audio") a.forceAudio = true; // headless too (e.g. SDL_AUDIODRIVER=disk)
+    else if (k == "--audio") a.forceAudio = true;
+    else if (k == "--profile") a.profile = next("");
+    else if (k == "--no-save") a.noSave = true;
+    else if (k == "--open-shop") a.frontend.openShop = true; // headless too (e.g. SDL_AUDIODRIVER=disk)
     else if (k == "--audio-demo") a.audioDemo = next("audio-demo.wav");
     else if (k == "--shots-every") a.shotsEvery = std::atoi(next("60").c_str());
     else if (k == "--campaign") a.frontend.campaign = next("quick");
@@ -219,6 +223,15 @@ int main(int argc, char** argv) {
   FrontendOptions options = args.frontend;
   if (args.benchSeconds > 0) { options.autoplay = true; options.showPerf = true; }
   auto frontend = std::make_unique<Frontend>(options); // GameState is large: keep it off the stack
+  // Benchmarks, screenshots and bots never touch the player's real save.
+  if (!args.profile.empty()) frontend->setProfilePath(args.profile);
+  else if (!headless && !options.autoplay && !args.noSave) {
+    if (char* dir = SDL_GetPrefPath("MrPowerUp82", "ArcanaSurvivors")) {
+      frontend->setProfilePath(std::string(dir) + "profile.ini");
+      std::printf("save=%sprofile.ini\n", dir);
+      SDL_free(dir);
+    }
+  }
   static Audio audio;
   if ((!headless || args.forceAudio) && !args.mute && audio.init()) frontend->setAudio(&audio);
 
