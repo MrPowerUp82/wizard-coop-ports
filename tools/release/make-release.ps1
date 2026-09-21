@@ -73,7 +73,8 @@ $gccHost = Get-FromImage 'arcana-host' 'gcc -dumpfullversion'
 $gccSwitch = Get-FromImage 'devkitpro/devkita64' '$DEVKITPRO/devkitA64/bin/aarch64-none-elf-gcc -dumpversion'
 $libnx = Get-FromImage 'devkitpro/devkita64' 'dkp-pacman -Q libnx switch-sdl2'
 $gccVita = Get-FromImage 'vitasdk/vitasdk' 'arm-vita-eabi-gcc -dumpversion'
-$sdlVita = Get-FromImage 'vitasdk/vitasdk' 'grep -E "define SDL_(MAJOR_VERSION|MINOR_VERSION|PATCHLEVEL)" $VITASDK/arm-vita-eabi/include/SDL2/SDL_version.h | awk "{print \$3}" | paste -sd.'
+# No double quotes here: Windows PowerShell 5.1 mangles them when calling native programs.
+$sdlVita = Get-FromImage 'vitasdk/vitasdk' 'grep -E SDL_MAJOR_VERSION\|SDL_MINOR_VERSION\|SDL_PATCHLEVEL $VITASDK/arm-vita-eabi/include/SDL2/SDL_version.h | grep -oE [0-9]+$ | head -n3 | paste -sd.'
 
 $notes = New-Object System.Collections.Generic.List[string]
 $notes.Add(([IO.File]::ReadAllText((Join-Path $Root 'tools\release\NOTES.md'), $Utf8)).Replace('{{VERSION}}', $Version).TrimEnd())
