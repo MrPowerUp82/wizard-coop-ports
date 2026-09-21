@@ -1,0 +1,37 @@
+Primeira versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch** e **PS Vita**. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
+
+## Destaques
+
+- **Sem JavaScript no gameplay.** A simulação (hordas, 6 fases, chefes, poderes, evoluções, combos, encontros, maldições, co-op com reviver) roda em C++20. Os containers têm capacidade fixa e o hot path não aloca memória depois do aquecimento.
+- **Renderer em lote:** sprites, formas, texto e chão saem de uma única textura, em ~6–8 chamadas de desenho por frame, mesmo com 180 inimigos na tela.
+- **Visual do cliente web portado:** chão em tiles por fase, atmosfera, animação dos personagens, efeito de cada especial (nova, meteoro, espinhos, lua e as variantes), raios, familiar, combos, convergência, números de dano, tremor e flash de tela.
+- **Áudio sintetizado:** os 31 efeitos e a trilha generativa (menu, horda, guardião, fúria, vitória, derrota), iguais aos do navegador, sem nenhum arquivo de áudio.
+- **Co-op local para até 4 jogadores** em tela compartilhada. No Switch, cada jogador pode usar um Joy-Con na horizontal, um par de Joy-Cons, o modo portátil ou um Pro Controller.
+- HUD por jogador, escolha de poderes com troca de opções, pausa (com liga/desliga do som), avisos de eventos e overlay de desempenho.
+
+## Instalação
+
+| Plataforma | Arquivo | Como instalar |
+|---|---|---|
+| Nintendo Switch (CFW/Atmosphère) | `arcana-survivors-v{{VERSION}}-switch.nro` | Copie para `sd:/switch/` e abra pelo Homebrew Menu. Use o modo aplicativo (segure R ao abrir um jogo) para ter memória total. |
+| PS Vita (HENkaku/Ensō) | `arcana-survivors-v{{VERSION}}-vita.vpk` | Instale pelo VitaShell. O Title ID é `ARCA00001`, então ele convive com o port JS antigo (`ARCS00001`). |
+| Linux x86_64 (dev) | `arcana-survivors-v{{VERSION}}-linux-x86_64.tar.gz` | Precisa de `libsdl2`, `libsdl2-image` e `libsdl2-ttf`. Extraia e rode `./arcana_desktop`. |
+
+## Controles
+
+| Ação | Switch | Joy-Con na horizontal | Vita | PC |
+|---|---|---|---|---|
+| Mover | analógico / direcional | analógico | analógico / direcional | WASD / setas |
+| Especial | A, R, ZR | SL ou botão da direita | ✕, R | Espaço |
+| Esquiva | B, L, ZL | SR ou botão de baixo | ○, L | Shift |
+| Trocar opções de poder | X, Y | botões de cima/esquerda | □, △ | R |
+| Pausa | + / − | + ou − | Start | Esc |
+| Overlay de desempenho | clique do analógico | clique do analógico | Select | F3 |
+
+## Limitações conhecidas
+
+- Ainda faltam a meta-progressão (loja, Códex, grimório, salvamento por console) e o multiplayer online.
+- A orientação do analógico de um Joy-Con sozinho na horizontal ainda não foi validada em todos os firmwares. Se ele girar errado, avise na issue.
+- O volume segue o do navegador, que é baixo por projeto.
+
+Se o FPS cair, abra o overlay de desempenho numa fase cheia ou num chefe e mande os números (`fps`, `frame`, `sim`, `mundo`, `draw`) numa issue.
