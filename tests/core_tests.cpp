@@ -5,7 +5,7 @@
 #include <cmath>
 #include <iostream>
 using namespace arcana;
-struct ZeroRandom : Random { double next() override { return 0.1; } };
+struct ZeroRandom : Random { arcana::real next() override { return 0.1; } };
 int main(){
   ZeroRandom rng;
   assert(xpNeeded(1)==10);

@@ -12,7 +12,9 @@ add_executable(arcana_psp_probe
 )
 target_include_directories(arcana_psp_probe PRIVATE ${ROOT}/include ${ROOT}/tools/probe)
 target_compile_features(arcana_psp_probe PRIVATE cxx_std_20)
-target_compile_options(arcana_psp_probe PRIVATE -O2 -G0 -Wall -Wno-missing-field-initializers -Wno-misleading-indentation -Wno-unused-parameter)
+# Single-precision simulation: the Allegrex FPU has no double support (see include/arcana/real.hpp).
+target_compile_definitions(arcana_psp_probe PRIVATE ARCANA_REAL_FLOAT)
+target_compile_options(arcana_psp_probe PRIVATE -O2 -G0 -fsingle-precision-constant -Wdouble-promotion -Wall -Wno-missing-field-initializers -Wno-misleading-indentation -Wno-unused-parameter)
 target_link_libraries(arcana_psp_probe PRIVATE pspdebug pspdisplay pspge pspctrl psppower)
 
 create_pbp_file(

@@ -17,7 +17,7 @@ namespace arcana::probe {
 
 struct Result { const char* name; double avgUs; double worstUs; int enemies; int shots; };
 
-struct FixedRandom final : Random { double next() override { return 0.5; } };
+struct FixedRandom final : Random { real next() override { return 0.5; } };
 
 // Separates the cost of `double` (software-emulated on the PSP's Allegrex) from `float` (FPU).
 template <class Now>
