@@ -27,15 +27,22 @@ Leia `NATIVE_PORT_STATUS.md` para o estado exato do port, comandos de build (Doc
 
 ## Build de tudo com Docker
 
-Só é preciso ter o Docker. Um comando compila e testa todos os alvos e junta os resultados em `dist/`:
+Só é preciso ter o Docker. Um comando compila e testa todos os alvos e junta os resultados em `dist/`.
 
-```powershell
-.\tools\docker\build-all.ps1              # Windows (PowerShell)
+**Windows:** dê dois cliques em `build.cmd`, ou rode no terminal. Não precisa de Git Bash nem de WSL, e a política de execução de scripts não atrapalha.
+
+```bat
+build.cmd                 :: todos os alvos
+build.cmd switch vita     :: só alguns: host | switch | vita
+release.cmd               :: builds + dist\release\v<versão>\ (arquivos, SHA256SUMS, notas)
 ```
 
+**Linux / macOS:**
+
 ```bash
-tools/docker/build-all.sh                  # Linux, macOS ou Git Bash
+tools/docker/build-all.sh                  # todos os alvos
 tools/docker/build-all.sh switch vita      # só alguns alvos: host | switch | vita
+tools/release/make-release.sh              # release
 ```
 
 | Alvo | Imagem | Saída |
