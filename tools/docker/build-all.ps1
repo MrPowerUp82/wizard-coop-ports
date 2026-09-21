@@ -17,7 +17,8 @@ if (-not $Targets -or $Targets.Count -eq 0) { $Targets = @('host', 'switch', 'vi
 
 function Invoke-Container([string]$Image, [string]$Script) {
   # The scripts run inside Linux containers; the repo keeps them LF-only (.gitattributes).
-  docker run --rm -v "${Root}:/src" -w /src $Image bash $Script
+  # Out-Host: the build log must not leak into the return value (a non-empty array is always truthy).
+  docker run --rm -v "${Root}:/src" -w /src $Image bash $Script | Out-Host
   return ($LASTEXITCODE -eq 0)
 }
 
@@ -50,7 +51,24 @@ foreach ($target in $Targets) {
         $results[$target] = 'ok  dist\vita\arcana-survivors-native.vpk'
       } else { $results[$target] = 'FALHOU' }
     }
-    default { Write-Host "alvo desconhecido: $target (use host, switch ou vita)" -ForegroundColor Red; exit 2 }
+    'psp' {
+      docker build -q -t arcana-host -f tools/docker/host.Dockerfile tools/docker | Out-Null
+      if ((Invoke-Container 'pspdev/pspdev' 'tools/docker/psp-build.sh') -and (Invoke-Container 'arcana-host' 'tools/docker/psp-iso.sh')) {
+        if (Test-Path dist\psp) { Remove-Item -Recurse -Force dist\psp }
+        New-Item -ItemType Directory -Force dist\psp | Out-Null
+        Copy-Item -Recurse build-psp\ArcanaSurvivors dist\psp\
+        Copy-Item build-psp\arcana-survivors.iso, build-psp\arcana-survivors.cso dist\psp\
+        $results[$target] = 'ok  dist\psp\arcana-survivors.iso / .cso + pasta ArcanaSurvivors\'
+      } else { $results[$target] = 'FALHOU' }
+    }
+    'psp-probe' {
+      if (Invoke-Container 'pspdev/pspdev' 'tools/docker/psp-probe-build.sh') {
+        New-Item -ItemType Directory -Force dist\psp-probe | Out-Null
+        Copy-Item build-psp-probe\EBOOT.PBP dist\psp-probe\ -Force
+        $results[$target] = 'ok  dist\psp-probe\EBOOT.PBP'
+      } else { $results[$target] = 'FALHOU' }
+    }
+    default { Write-Host "alvo desconhecido: $target (use host, switch, vita, psp ou psp-probe)" -ForegroundColor Red; exit 2 }
   }
 }
 

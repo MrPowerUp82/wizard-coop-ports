@@ -11,7 +11,7 @@ public:
 
   template <class Fn>
   int advance(double frameSeconds, Fn&& update) {
-    accumulator_ += std::clamp(frameSeconds, 0.0, step_ * maxCatchUpSteps_);
+    accumulator_ += std::clamp<double>(frameSeconds, 0.0, step_ * maxCatchUpSteps_);
     int steps = 0;
     while (accumulator_ >= step_ && steps < maxCatchUpSteps_) {
       update(step_);

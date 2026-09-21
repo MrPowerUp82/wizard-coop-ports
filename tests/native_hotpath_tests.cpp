@@ -30,7 +30,7 @@ void operator delete[](void* p) noexcept { std::free(p); }
 void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
 
 struct DeterministicRandom final : arcana::Random {
-  double next() override { return 0.41; }
+  arcana::real next() override { return 0.41; }
 };
 
 int main() {

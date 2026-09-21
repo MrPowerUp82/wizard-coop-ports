@@ -29,6 +29,7 @@ struct Args {
   int frames{-1};         // headless: stop after N frames
   double benchSeconds{};  // headless benchmark with fixed 1/60 frames
   bool mute{}, forceAudio{}, noSave{};
+  bool psp{};             // preview the PSP build: 480x272, compact UI, 512x512 page, 64 px art
   std::string profile;    // save file; default: the OS per-user data folder
   std::string audioDemo;  // render every sound and music mood to a WAV file and exit
   int shotsEvery{};       // headless: also save <screenshot>-NNNN.png every N frames
@@ -43,10 +44,11 @@ Args parseArgs(int argc, char** argv) {
     else if (k == "--perf") a.frontend.showPerf = true;
     else if (k == "--charged") a.frontend.debugCharge = true;
     else if (k == "--mute") a.mute = true;
-    else if (k == "--audio") a.forceAudio = true;
+    else if (k == "--audio") a.forceAudio = true; // headless too (e.g. SDL_AUDIODRIVER=disk)
     else if (k == "--profile") a.profile = next("");
     else if (k == "--no-save") a.noSave = true;
-    else if (k == "--open-shop") a.frontend.openShop = true; // headless too (e.g. SDL_AUDIODRIVER=disk)
+    else if (k == "--open-shop") a.frontend.openShop = true;
+    else if (k == "--psp") { a.psp = true; a.frontend.compact = true; a.width = 480; a.height = 272; }
     else if (k == "--audio-demo") a.audioDemo = next("audio-demo.wav");
     else if (k == "--shots-every") a.shotsEvery = std::atoi(next("60").c_str());
     else if (k == "--campaign") a.frontend.campaign = next("quick");
@@ -201,20 +203,21 @@ int main(int argc, char** argv) {
   SDL_RendererInfo info{};
   SDL_GetRendererInfo(renderer, &info);
 
-  const std::string atlasPath = findAsset(args.atlas, {"native_atlas_128.png", "native_atlas.png"});
+  const std::string atlasPath = args.psp ? findAsset(args.atlas, {"native_atlas_64.png"})
+                                         : findAsset(args.atlas, {"native_atlas_128.png", "native_atlas.png"});
   SDL_Surface* atlas = atlasPath.empty() ? nullptr : IMG_Load(atlasPath.c_str());
   if (!atlas) { std::fprintf(stderr, "atlas not found (%s): %s\n", atlasPath.c_str(), IMG_GetError()); return 1; }
-  const std::string terrainPath = findAsset("", {"terrain_tiles.png"});
+  const std::string terrainPath = findAsset("", {args.psp ? "terrain_tiles_64.png" : "terrain_tiles.png"});
   SDL_Surface* terrain = terrainPath.empty() ? nullptr : IMG_Load(terrainPath.c_str()); // optional
   const std::string fontPath = findAsset(args.font, {"fonts/DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
                                                      "C:/Windows/Fonts/segoeuib.ttf", "C:/Windows/Fonts/arialbd.ttf"});
-  TTF_Font* font = fontPath.empty() ? nullptr : TTF_OpenFont(fontPath.c_str(), kFontBakePx);
+  TTF_Font* font = fontPath.empty() ? nullptr : TTF_OpenFont(fontPath.c_str(), args.psp ? 18 : kFontBakePx);
   if (!font) { std::fprintf(stderr, "font not found (%s): %s\n", fontPath.c_str(), TTF_GetError()); return 1; }
 
   BatchRenderer batch;
   std::string error;
   const int cell = atlas->w / 6;
-  if (!batch.init(renderer, atlas, cell, 6, terrain, font, error)) { std::fprintf(stderr, "renderer init: %s\n", error.c_str()); return 1; }
+  if (!batch.init(renderer, atlas, cell, 6, terrain, font, error, args.psp)) { std::fprintf(stderr, "renderer init: %s\n", error.c_str()); return 1; }
   SDL_FreeSurface(atlas);
   if (terrain) SDL_FreeSurface(terrain);
   TTF_CloseFont(font);

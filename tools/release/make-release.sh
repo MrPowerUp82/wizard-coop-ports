@@ -20,13 +20,15 @@ fi
 COMMIT="$(git rev-parse HEAD)"
 SHORT="$(git rev-parse --short HEAD)"
 
-bash tools/docker/build-all.sh host switch vita
+bash tools/docker/build-all.sh host switch vita psp
 
 OUT="dist/release/v$VERSION"
 rm -rf "$OUT"; mkdir -p "$OUT"
 NAME="arcana-survivors-v$VERSION"
 cp dist/switch/arcana-survivors.nro "$OUT/$NAME-switch.nro"
 cp dist/vita/arcana-survivors-native.vpk "$OUT/$NAME-vita.vpk"
+cp dist/psp/arcana-survivors.iso "$OUT/$NAME-psp.iso"
+cp dist/psp/arcana-survivors.cso "$OUT/$NAME-psp.cso"
 # Linux bundle: executable + assets in the layout findAsset() expects.
 STAGE="$(mktemp -d)"
 mkdir -p "$STAGE/$NAME-linux-x86_64/assets/fonts"
@@ -36,13 +38,14 @@ cp assets/fonts/* "$STAGE/$NAME-linux-x86_64/assets/fonts/"
 tar -C "$STAGE" --owner=0 --group=0 --mtime="@$(git log -1 --format=%ct)" -czf "$OUT/$NAME-linux-x86_64.tar.gz" "$NAME-linux-x86_64"
 rm -rf "$STAGE"
 
-(cd "$OUT" && sha256sum -- *.nro *.vpk *.tar.gz > SHA256SUMS.txt)
+(cd "$OUT" && sha256sum -- *.nro *.vpk *.iso *.cso *.tar.gz > SHA256SUMS.txt)
 
 # Toolchain versions, for reproducibility.
 GCC_HOST="$(docker run --rm arcana-host gcc -dumpfullversion)"
 GCC_SWITCH="$(docker run --rm devkitpro/devkita64 bash -c '$DEVKITPRO/devkitA64/bin/aarch64-none-elf-gcc -dumpversion')"
 LIBNX="$(docker run --rm devkitpro/devkita64 bash -c "dkp-pacman -Q libnx switch-sdl2 | tr '\n' ' '")"
 GCC_VITA="$(docker run --rm vitasdk/vitasdk bash -c 'arm-vita-eabi-gcc -dumpversion')"
+GCC_PSP="$(docker run --rm pspdev/pspdev psp-gcc -dumpversion)"
 SDL_VITA="$(docker run --rm vitasdk/vitasdk bash -c 'sed -n "s/^#define SDL_\(MAJOR\|MINOR\|PATCH\)LEVEL *//p;s/^#define SDL_\(MAJOR\|MINOR\)_VERSION *//p" $VITASDK/arm-vita-eabi/include/SDL2/SDL_version.h | paste -sd.')"
 image() { docker image inspect --format '{{index .RepoDigests 0}}' "$1" 2>/dev/null || echo "$1 (local)"; }
 
@@ -68,6 +71,7 @@ NOTES="$OUT/RELEASE_NOTES.md"
   echo "- Gerado com \`tools/release/make-release.sh\` (Docker), em $(date -u +%Y-%m-%d)."
   echo "- Switch: devkitA64 GCC $GCC_SWITCH · $LIBNX· imagem \`$(image devkitpro/devkita64)\`"
   echo "- Vita: arm-vita-eabi GCC $GCC_VITA · SDL $SDL_VITA · imagem \`$(image vitasdk/vitasdk)\`"
+  echo "- PSP: psp-gcc $GCC_PSP · simulação em float · imagem \`$(image pspdev/pspdev)\`"
   echo "- Linux: GCC $GCC_HOST (imagem \`arcana-host\`, \`tools/docker/host.Dockerfile\`) · testes \`core\` e \`native_hotpath\` passando"
 } > "$NOTES"
 
@@ -77,4 +81,4 @@ ls -la "$OUT"
 echo
 echo "Para publicar (GitHub CLI):"
 echo "  git tag -a v$VERSION -m \"Arcana Survivors v$VERSION\" && git push origin v$VERSION"
-echo "  gh release create v$VERSION $OUT/*.nro $OUT/*.vpk $OUT/*.tar.gz $OUT/SHA256SUMS.txt --title \"Arcana Survivors v$VERSION\" --notes-file $NOTES"
+echo "  gh release create v$VERSION $OUT/*.nro $OUT/*.vpk $OUT/*.cso $OUT/*.iso $OUT/*.tar.gz $OUT/SHA256SUMS.txt --title \"Arcana Survivors v$VERSION\" --notes-file $NOTES"

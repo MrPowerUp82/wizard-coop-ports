@@ -27,7 +27,7 @@ $Commit = (git rev-parse HEAD).Trim()
 $Short = (git rev-parse --short HEAD).Trim()
 $CommitTime = (git log -1 --format=%ct).Trim()
 
-& (Join-Path $Root 'tools\docker\build-all.ps1') host switch vita
+& (Join-Path $Root 'tools\docker\build-all.ps1') host switch vita psp
 if ($LASTEXITCODE -ne 0) { Write-Host 'Build falhou; release nao gerada.' -ForegroundColor Red; exit 1 }
 
 $Out = "dist\release\v$Version"
@@ -36,6 +36,8 @@ New-Item -ItemType Directory -Force $Out | Out-Null
 $Name = "arcana-survivors-v$Version"
 Copy-Item dist\switch\arcana-survivors.nro "$Out\$Name-switch.nro"
 Copy-Item dist\vita\arcana-survivors-native.vpk "$Out\$Name-vita.vpk"
+Copy-Item dist\psp\arcana-survivors.iso "$Out\$Name-psp.iso"
+Copy-Item dist\psp\arcana-survivors.cso "$Out\$Name-psp.cso"
 
 # Linux bundle, packed inside the host image so owners/permissions/timestamps are reproducible.
 $Stage = "dist\release\stage\$Name-linux-x86_64"
@@ -58,7 +60,7 @@ function Get-Sha256([string]$Path) {
 }
 
 # SHA256SUMS.txt in the coreutils format, so `sha256sum -c` works on Linux/macOS too.
-$files = Get-ChildItem $Out -File | Where-Object { $_.Extension -in '.nro', '.vpk', '.gz' } | Sort-Object Name
+$files = Get-ChildItem $Out -File | Where-Object { $_.Extension -in '.nro', '.vpk', '.iso', '.cso', '.gz' } | Sort-Object Name
 $sums = foreach ($f in $files) { '{0}  {1}' -f (Get-Sha256 $f.FullName), $f.Name }
 [IO.File]::WriteAllText((Join-Path $Root "$Out\SHA256SUMS.txt"), (($sums -join "`n") + "`n"), $Utf8)
 
@@ -73,6 +75,8 @@ $gccHost = Get-FromImage 'arcana-host' 'gcc -dumpfullversion'
 $gccSwitch = Get-FromImage 'devkitpro/devkita64' '$DEVKITPRO/devkitA64/bin/aarch64-none-elf-gcc -dumpversion'
 $libnx = Get-FromImage 'devkitpro/devkita64' 'dkp-pacman -Q libnx switch-sdl2'
 $gccVita = Get-FromImage 'vitasdk/vitasdk' 'arm-vita-eabi-gcc -dumpversion'
+$gccPsp = Get-FromImage 'pspdev/pspdev' 'psp-gcc -dumpversion'
+$sdlPsp = Get-FromImage 'pspdev/pspdev' 'grep -E SDL_MAJOR_VERSION\|SDL_MINOR_VERSION\|SDL_PATCHLEVEL $PSPDEV/psp/include/SDL2/SDL_version.h | grep -oE [0-9]+$ | head -n3 | paste -sd.'
 # No double quotes here: Windows PowerShell 5.1 mangles them when calling native programs.
 $sdlVita = Get-FromImage 'vitasdk/vitasdk' 'grep -E SDL_MAJOR_VERSION\|SDL_MINOR_VERSION\|SDL_PATCHLEVEL $VITASDK/arm-vita-eabi/include/SDL2/SDL_version.h | grep -oE [0-9]+$ | head -n3 | paste -sd.'
 
@@ -96,6 +100,7 @@ $notes.Add("- Commit: ``$Commit``")
 $notes.Add("- Gerado com ``tools/release/make-release.ps1`` (Docker), em $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')).")
 $notes.Add("- Switch: devkitA64 GCC $gccSwitch · $libnx · imagem ``$(Get-Digest 'devkitpro/devkita64')``")
 $notes.Add("- Vita: arm-vita-eabi GCC $gccVita · SDL $sdlVita · imagem ``$(Get-Digest 'vitasdk/vitasdk')``")
+$notes.Add("- PSP: psp-gcc $gccPsp · SDL $sdlPsp · simulacao em float · imagem ``$(Get-Digest 'pspdev/pspdev')``")
 $notes.Add("- Linux: GCC $gccHost (imagem ``arcana-host``, ``tools/docker/host.Dockerfile``) · testes passando")
 $NotesPath = Join-Path $Root "$Out\RELEASE_NOTES.md"
 [IO.File]::WriteAllText($NotesPath, (($notes -join "`n") + "`n"), $Utf8)
@@ -107,6 +112,6 @@ Write-Host 'Para publicar (GitHub CLI):'
 Write-Host "  git push origin main"
 Write-Host "  git tag -a v$Version -m `"Arcana Survivors v$Version`""
 Write-Host "  git push origin v$Version"
-Write-Host "  gh release create v$Version $Out\$Name-switch.nro $Out\$Name-vita.vpk $Out\$Name-linux-x86_64.tar.gz $Out\SHA256SUMS.txt --title `"Arcana Survivors v$Version`" --notes-file $Out\RELEASE_NOTES.md"
+Write-Host "  gh release create v$Version $Out\$Name-switch.nro $Out\$Name-vita.vpk $Out\$Name-psp.cso $Out\$Name-psp.iso $Out\$Name-linux-x86_64.tar.gz $Out\SHA256SUMS.txt --title `"Arcana Survivors v$Version`" --notes-file $Out\RELEASE_NOTES.md"
 Write-Host ''
-Write-Host "Ou pelo site: crie a release na tag v$Version, cole RELEASE_NOTES.md e anexe os 4 arquivos."
+Write-Host "Ou pelo site: crie a release na tag v$Version, cole RELEASE_NOTES.md e anexe os 6 arquivos."

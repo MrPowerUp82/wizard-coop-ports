@@ -3,7 +3,7 @@
 #include <iostream>
 
 using Clock = std::chrono::steady_clock;
-struct R final : arcana::Random { double next() override { return 0.5; } };
+struct R final : arcana::Random { arcana::real next() override { return 0.5; } };
 
 template <class Setup>
 double runScenario(Setup&& setup, int ticks = 600) {

@@ -1,8 +1,10 @@
 // Tests rely on assert(); keep it active in Release builds.
 #undef NDEBUG
+#include "fastmath.hpp"
 #include "frontend.hpp"
 
 #include <cassert>
+#include <cmath>
 #include <memory>
 
 using namespace arcana;
@@ -22,6 +24,12 @@ int colorOf(const Frontend& f, const char* id) { return f.state().players.at(id)
 } // namespace
 
 int main() {
+  // Visual trig: within 2e-3 of libm over several turns (renderer only, never gameplay).
+  for (float a = -20.0f; a < 20.0f; a += 0.0137f) {
+    float fs, fc;
+    fastSinCos(a, fs, fc);
+    assert(std::fabs(fs - std::sin(a)) < 2e-3f && std::fabs(fc - std::cos(a)) < 2e-3f);
+  }
   // Solo: P1 picks Vermelho (1) with one press to the right.
   {
     auto f = std::make_unique<Frontend>();

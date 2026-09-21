@@ -57,7 +57,7 @@ bool visible(float sx, float sy, float radius, const Camera& c) {
          sy + radius >= c.viewportY && sy - radius <= c.viewportY + c.height;
 }
 
-void screenPoint(double wx, double wy, const Camera& c, float& sx, float& sy) {
+void screenPoint(real wx, real wy, const Camera& c, float& sx, float& sy) {
   sx = c.viewportX + c.width * 0.5f + (static_cast<float>(wx) - c.x) * c.zoom;
   sy = c.viewportY + c.height * 0.5f + (static_cast<float>(wy) - c.y) * c.zoom;
 }
@@ -74,7 +74,7 @@ std::uint32_t playerColor(int color, std::uint8_t alpha) {
 
 namespace {
 
-void bar(RenderQueue& out, float cx, float top, float width, double ratio, std::uint32_t fill) {
+void bar(RenderQueue& out, float cx, float top, float width, real ratio, std::uint32_t fill) {
   const float r = static_cast<float>(std::clamp(ratio, 0.0, 1.0));
   out.bars.push_back({cx - width * 0.5f - 1, top - 1, width + 2, 6, rgba(8, 10, 18, 200)});
   out.bars.push_back({cx - width * 0.5f, top, width * r, 4, fill});
@@ -93,10 +93,10 @@ void drawWeapons(const Player& p, float px, float py, const Camera& camera, Rend
     static constexpr int counts[5] = {1, 2, 2, 3, 3};
     const bool evolved = rankOf(p, "constellation") > 0;
     const int count = counts[rank - 1] + (evolved ? 2 : 0);
-    const double radius = 78 + rank * 4 + (evolved ? 20 : 0);
+    const real radius = 78 + rank * 4 + (evolved ? 20 : 0);
     const float orb = static_cast<float>(evolved ? 20 : 14) * z;
     for (int n = 0; n < count; ++n) {
-      const double a = p.orbitAngle + n * PI * 2 / count;
+      const real a = p.orbitAngle + n * PI * 2 / count;
       const float x = px + static_cast<float>(std::cos(a) * radius) * z, y = py + static_cast<float>(std::sin(a) * radius) * z;
       out.circles.push_back({x, y, orb * 1.6f, playerColor(p.color, 60), 7});
       out.circles.push_back({x, y, orb, rgba(240, 248, 255, 235), 7});
@@ -111,7 +111,7 @@ void drawWeapons(const Player& p, float px, float py, const Camera& camera, Rend
 
 void drawEvents(const GameState& state, const Camera& camera, RenderQueue& out) {
   for (const auto& e : state.events) {
-    const double age = state.time - e.t;
+    const real age = state.time - e.t;
     if (age < 0 || age > 0.6) continue;
     float x, y; screenPoint(e.x, e.y, camera, x, y);
     const float k = static_cast<float>(age / 0.6);
@@ -156,7 +156,7 @@ void buildRenderQueue(const GameState& state, const Camera& camera, RenderQueue&
       out.circles.push_back({x, y, radius, rgba(255, 80, 60, 110), 1});
     } else {
       // The telegraph fills up as the warning runs out, like the web version's charge ring.
-      const double charge = hazard.warn0 > 0 ? 1 - std::clamp(hazard.warning / hazard.warn0, 0.0, 1.0) : 1;
+      const real charge = hazard.warn0 > 0 ? 1 - std::clamp(hazard.warning / hazard.warn0, 0.0, 1.0) : 1;
       out.circles.push_back({x, y, radius * static_cast<float>(charge), rgba(255, 70, 70, 50), 1});
       out.circles.push_back({x, y, radius, rgba(255, 90, 80, 170), 1, 3});
     }

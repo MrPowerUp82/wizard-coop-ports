@@ -6,7 +6,6 @@
 namespace arcana::sdl {
 namespace {
 
-constexpr float SR = static_cast<float>(Audio::kSampleRate);
 constexpr float kMaster = 0.32f;  // audio.js master gain
 constexpr float kMusicBus = 0.9f; // music.js bus gain
 constexpr double kPi = 3.14159265358979323846;
@@ -40,9 +39,9 @@ constexpr MoodDef kMoods[7] = {
 float midiHz(int midi) { return 440.0f * std::pow(2.0f, (static_cast<float>(midi) - 69) / 12.0f); }
 
 // PolyBLEP residual: removes most aliasing from the square/saw discontinuities.
-float polyBlep(double t, double dt) {
-  if (t < dt) { t /= dt; return static_cast<float>(t + t - t * t - 1); }
-  if (t > 1 - dt) { t = (t - 1) / dt; return static_cast<float>(t * t + t + t + 1); }
+float polyBlep(float t, float dt) {
+  if (t < dt) { t /= dt; return t + t - t * t - 1; }
+  if (t > 1 - dt) { t = (t - 1) / dt; return t * t + t + t + 1; }
   return 0;
 }
 
@@ -69,10 +68,11 @@ const char* Audio::name(Sound s) {
 
 // ---- device ------------------------------------------------------------------------------------
 
-bool Audio::init() {
+bool Audio::init(int sampleRate) {
+  sr_ = static_cast<float>(sampleRate);
   if (SDL_WasInit(SDL_INIT_AUDIO) == 0 && SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) return false;
   SDL_AudioSpec want{};
-  want.freq = kSampleRate;
+  want.freq = sampleRate;
   want.format = AUDIO_S16SYS;
   want.channels = 2;
   want.samples = 1024;
@@ -80,13 +80,13 @@ bool Audio::init() {
   want.userdata = this;
   device_ = SDL_OpenAudioDevice(nullptr, 0, &want, &spec_, SDL_AUDIO_ALLOW_CHANNELS_CHANGE);
   if (!device_) return false;
-  if (spec_.freq != kSampleRate) { SDL_CloseAudioDevice(device_); device_ = 0; return false; }
+  if (spec_.freq != sampleRate) { SDL_CloseAudioDevice(device_); device_ = 0; return false; }
   scratch_.resize(std::min<std::size_t>(scratch_.capacity(), spec_.samples * 2u));
   SDL_PauseAudioDevice(device_, 0);
   return true;
 }
 
-void Audio::initOffline() { offline_ = true; }
+void Audio::initOffline(int sampleRate) { offline_ = true; sr_ = static_cast<float>(sampleRate); }
 
 void Audio::shutdown() {
   if (device_) SDL_CloseAudioDevice(device_);
@@ -167,7 +167,7 @@ void Audio::pumpCommands() {
       const Mood next = c.mood;
       if (next == mood_ && c.phase == phase_) continue;
       // Changing mood restarts on a bar line so layers enter in time.
-      if (next != mood_) { step_ = 0; nextStep_ = clock_ + static_cast<std::int64_t>(0.05f * SR); }
+      if (next != mood_) { step_ = 0; nextStep_ = clock_ + static_cast<std::int64_t>(0.05f * sr_); }
       mood_ = next; phase_ = std::max(0, c.phase);
     }
   }
@@ -181,7 +181,7 @@ float Audio::noiseSample() {
 
 void Audio::updateFilter(Voice& v) {
   // RBJ biquad, Q = 1/sqrt(2).
-  const float w = static_cast<float>(2 * kPi) * std::clamp(v.cutoff, 20.0f, SR * 0.45f) / SR;
+  const float w = static_cast<float>(2 * kPi) * std::clamp(v.cutoff, 20.0f, sr_ * 0.45f) / sr_;
   const float cw = std::cos(w), alpha = std::sin(w) * 0.70710678f;
   const float a0 = 1 + alpha;
   if (v.filter == Filter::LowPass) {
@@ -203,19 +203,19 @@ void Audio::startVoice(const VoiceDesc& d) {
   Voice& v = *slot;
   v = Voice{};
   v.active = true; v.wave = d.wave; v.filter = d.filter; v.music = d.music;
-  v.start = clock_ + static_cast<std::int64_t>(d.delay * SR);
-  v.end = v.start + static_cast<std::int64_t>(d.stopAfter * SR);
+  v.start = clock_ + static_cast<std::int64_t>(d.delay * sr_);
+  v.end = v.start + static_cast<std::int64_t>(d.stopAfter * sr_);
   v.freq = d.from;
-  v.freqSamples = static_cast<int>(d.rampSeconds * SR);
+  v.freqSamples = static_cast<int>(d.rampSeconds * sr_);
   v.freqMul = rampMul(d.from, std::max(20.0f, d.to), v.freqSamples);
-  v.attackSamples = static_cast<int>(d.attack * SR);
-  v.decaySamples = std::max(1, static_cast<int>((d.duration - d.attack) * SR));
+  v.attackSamples = static_cast<int>(d.attack * sr_);
+  v.decaySamples = std::max(1, static_cast<int>((d.duration - d.attack) * sr_));
   if (v.attackSamples > 0) { v.gain = d.startGain; v.gainMulA = rampMul(d.startGain, d.peakGain, v.attackSamples); }
   else v.gain = d.peakGain;
   v.gainMulB = rampMul(d.peakGain, d.endGain, v.decaySamples);
   if (d.filter != Filter::None) {
     v.cutoff = d.cutoffFrom;
-    v.cutoffSamples = static_cast<int>(d.cutoffSeconds * SR);
+    v.cutoffSamples = static_cast<int>(d.cutoffSeconds * sr_);
     v.cutoffMul = rampMul(d.cutoffFrom, std::max(40.0f, d.cutoffTo), v.cutoffSamples);
     updateFilter(v);
   }
@@ -289,7 +289,7 @@ void Audio::musicVoice(Wave wave, int midi, std::int64_t at, float duration, flo
   d.startGain = 0.0001f; d.peakGain = gain * kMusicBus; d.attack = attack; d.endGain = 0.0001f; d.duration = duration;
   if (filter > 0) { d.filter = Filter::LowPass; d.cutoffFrom = d.cutoffTo = filter; }
   d.stopAfter = duration + 0.05f;
-  d.delay = static_cast<float>(at - clock_) / SR;
+  d.delay = static_cast<float>(at - clock_) / sr_;
   d.music = true;
   startVoice(d);
 }
@@ -302,7 +302,7 @@ void Audio::scheduleMusicStep(std::int64_t at) {
   const int root = kRoots[phase_ % 6];
   const int chord[3] = {base[0] + root, base[1] + root, base[2] + root};
   const int beat = static_cast<int>(step_ % 16);
-  const float delay = static_cast<float>(at - clock_) / SR;
+  const float delay = static_cast<float>(at - clock_) / sr_;
   if (m.pad > 0 && beat == 0)
     for (int note : chord) musicVoice(Wave::Triangle, note, at, sixteenth * 16 * 0.98f, m.pad, 0.6f, 1400);
   if (m.arp > 0 && step_ % 2 == 0) {
@@ -324,7 +324,7 @@ void Audio::scheduleMusicStep(std::int64_t at) {
     startVoice(d);
   }
   if (m.lead > 0 && beat % 8 == 6) musicVoice(Wave::Square, chord[2] + 24, at, sixteenth * 3, m.lead, 0.01f, 2400);
-  nextStep_ = at + static_cast<std::int64_t>(sixteenth * SR);
+  nextStep_ = at + static_cast<std::int64_t>(sixteenth * sr_);
   ++step_;
 }
 
@@ -341,23 +341,23 @@ void Audio::mix(float* out, int frames) {
     const int from = static_cast<int>(std::max<std::int64_t>(0, v.start - blockStart));
     const int to = static_cast<int>(std::min<std::int64_t>(frames, v.end - blockStart));
     for (int i = from; i < to; ++i) {
-      const double dt = v.freq / SR;
+      const float dt = v.freq / sr_;
       float s;
       switch (v.wave) {
         case Wave::Sine: {
-          const double p = v.phase * 1024.0;
-          const int k = static_cast<int>(p);
-          const float f = static_cast<float>(p - k);
+          const float p = v.phase * 1024.0f;
+          const int k = std::min(1023, static_cast<int>(p));
+          const float f = p - static_cast<float>(k);
           s = kSine[static_cast<std::size_t>(k)] + (kSine[static_cast<std::size_t>(k) + 1] - kSine[static_cast<std::size_t>(k)]) * f;
           break;
         }
-        case Wave::Triangle: s = static_cast<float>(v.phase < 0.5 ? 4 * v.phase - 1 : 3 - 4 * v.phase); break;
+        case Wave::Triangle: s = v.phase < 0.5f ? 4 * v.phase - 1 : 3 - 4 * v.phase; break;
         case Wave::Square: {
-          double t2 = v.phase + 0.5; if (t2 >= 1) t2 -= 1;
-          s = (v.phase < 0.5 ? 1.0f : -1.0f) + polyBlep(v.phase, dt) - polyBlep(t2, dt);
+          float t2 = v.phase + 0.5f; if (t2 >= 1) t2 -= 1;
+          s = (v.phase < 0.5f ? 1.0f : -1.0f) + polyBlep(v.phase, dt) - polyBlep(t2, dt);
           break;
         }
-        case Wave::Saw: s = static_cast<float>(2 * v.phase - 1) - polyBlep(v.phase, dt); break;
+        case Wave::Saw: s = 2 * v.phase - 1 - polyBlep(v.phase, dt); break;
         default: s = noiseSample(); break;
       }
       v.phase += dt;

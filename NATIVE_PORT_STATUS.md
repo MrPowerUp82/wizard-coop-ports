@@ -1,5 +1,34 @@
 # Native Port Status
 
+## PSP (branch `psp-port`, em teste)
+
+- **Probe de CPU** (`platforms/psp/probe`): mediu no PPSSPP que o `double` custa ~100× o `float` no
+  Allegrex. O core ganhou o tipo `arcana::real` (`include/arcana/real.hpp`): `double` em PC/Switch/Vita
+  (sem mudança) e `float` no PSP (`ARCANA_REAL_FLOAT` + `-fsingle-precision-constant`). O pior caso
+  foi de 46 ms para 1,9 ms por tick; 200 partidas de bot em `float` × `double` ficam dentro do ruído.
+- **Jogo** (`platforms/psp/sdl`): SDL2 (GU) com o mesmo frontend em modo compacto:
+  - página única de 512×512 (atlas de 64 px, chão de 64 px, glifos de 18 px); o flash de dano vira
+    tinta vermelha, porque não há espaço para as silhuetas;
+  - interface para 480×272 (`FrontendOptions::compact`): só 1 jogador, menu com cartão ao lado, HUD
+    reorganizado, escolha de poderes e loja com rolagem;
+  - áudio a 22.050 Hz e mixer sem `double`;
+  - trigonometria visual por polinômio (`platforms/sdl/fastmath.hpp`) e círculos por rotação
+    incremental, porque seno e cosseno são software no PSP;
+  - contorno para um bug da SDL2 2.32 no PSP: geometria texturizada não liga `GU_TEXTURE_2D`
+    (`BatchRenderer::begin`).
+- No PPSSPP, com o bot e especiais o tempo todo: 60 fps, 91 inimigos, simulação 0,63 ms, mundo 1,35 ms.
+- Build: `build.cmd psp` / `tools/docker/build-all.sh psp` gera em `dist/psp/`:
+  - `arcana-survivors.iso` e `.cso` (imagem de UMD, um arquivo só; vai em `ms0:/ISO/`). O EBOOT.BIN é
+    o PRX sem criptografia, aceito por CFW, Adrenaline e PPSSPP. O CSO é gerado por
+    `tools/psp/make_cso.py`, que confere byte a byte que ele descomprime de volta para a ISO;
+  - `ArcanaSurvivors/` (EBOOT.PBP + assets), a alternativa em pasta para `ms0:/PSP/GAME/`.
+- Save em `ms0:/data/arcana-survivors/profile.ini`, compartilhado pela ISO e pela pasta. O disco é
+  somente leitura, e pastas em `PSP/GAME` ou `PSP/SAVEDATA` sem metadados aparecem como dados
+  corrompidos no XMB. Um `autoplay.txt` nessa pasta liga o bot com overlay de desempenho (escreva
+  `charged` dentro para especiais contínuos).
+- Prévia no PC: `arcana_desktop --psp` (mesma resolução, interface e texturas do PSP).
+- Falta: medir em hardware real (PSP-1000 com 32 MB e PSP-2000+), e validar o som.
+
 ## Stage 4 — áudio e música (2026-09-21)
 
 - `platforms/sdl/audio.*`: port do `src/audio.js` + `src/music.js`. Como no navegador, tudo é

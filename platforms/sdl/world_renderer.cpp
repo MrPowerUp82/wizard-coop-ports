@@ -1,4 +1,5 @@
 #include "world_renderer.hpp"
+#include "fastmath.hpp"
 #include "arcana/data.hpp"
 
 #include <algorithm>
@@ -22,8 +23,9 @@ std::uint32_t A(std::uint32_t color, float alpha) {
   return native::withAlpha(color, static_cast<std::uint8_t>(std::clamp(alpha * base, 0.0f, 1.0f) * 255.0f));
 }
 float easeOut(float t) { return 1 - (1 - t) * (1 - t) * (1 - t); }
-float fsin(double v) { return static_cast<float>(std::sin(v)); }
-float fcos(double v) { return static_cast<float>(std::cos(v)); }
+// Visual-only trig (software sin/cos are expensive on the PSP); see fastmath.hpp.
+float fsin(float v) { return fastSin(v); }
+float fcos(float v) { return fastCos(v); }
 
 constexpr std::uint32_t kElements[4] = {hex(0x76dfff), hex(0xff9955), hex(0x92ed68), hex(0xc4a0ff)};
 
@@ -55,13 +57,14 @@ void drawAtmosphere(Frame& f) {
   constexpr float spacing = 190;
   for (int gx = static_cast<int>(std::floor((f.left - 50) / spacing)); gx <= static_cast<int>(std::ceil((f.right + 50) / spacing)); ++gx) {
     for (int gy = static_cast<int>(std::floor((f.top - 50) / spacing)); gy <= static_cast<int>(std::ceil((f.bottom + 50) / spacing)); ++gy) {
-      const double seed = std::sin(gx * 127.1 + gy * 311.7) * 43758.5453;
-      const float offset = static_cast<float>(seed - std::floor(seed));
+      const float seed = fsin(static_cast<float>(gx) * 127.1f + static_cast<float>(gy) * 311.7f) * 43758.5453f;
+      const float offset = seed - std::floor(seed);
       const float x = gx * spacing + offset * spacing + fsin(f.time * 0.35 + seed) * 24;
       const float y = gy * spacing + std::fmod(offset * 7, 1.0f) * spacing + fcos(f.time * 0.45 + seed) * 30;
       const float pulse = 0.5f + fsin(f.time * 1.2 + seed) * 0.5f;
       f.b.glow(x, y, 9 + offset * 5, color, 0.07f + pulse * 0.16f);
-      f.b.circle(x, y, 0.8f + offset, A(color, 0.12f + pulse * 0.3f));
+      const float dot = 0.8f + offset;
+      f.b.rect(x - dot, y - dot, dot * 2, dot * 2, A(color, 0.12f + pulse * 0.3f));
     }
   }
 }
@@ -96,10 +99,10 @@ void drawEncounter(Frame& f, const Encounter& enc) {
   b.circle(x, y, r, A(color, 0.08f));
   b.dashedCircle(x, y, r, 10, 8, -f.time * 20, color, 2);
   // Merchant progress is per player (shop progress); show the best one.
-  double progress = enc.progress;
+  real progress = enc.progress;
   if (merchant) { progress = 0; for (const auto& [_, p] : f.game.players) progress = std::max(progress, p.shopProgress); }
-  const double seconds = merchant ? 1.5 : 3.0;
-  if (progress > 0 && !done) b.arc(x, y, r, r, -HALF_PI, -HALF_PI + TAU * static_cast<float>(std::min(1.0, progress / seconds)), color, 5);
+  const real seconds = merchant ? 1.5 : 3.0;
+  if (progress > 0 && !done) b.arc(x, y, r, r, -HALF_PI, -HALF_PI + TAU * static_cast<float>(std::min<real>(1.0, progress / seconds)), color, 5);
   const float bob = fsin(f.time * 2.4) * 3;
   if (merchant) {
     b.rect(x - 30, y - 2, 60, 20, hex(0x3b2a1a));
@@ -132,7 +135,7 @@ void drawSpecialZone(Frame& f, const Zone& z) {
     for (int n = 0; n < 22; ++n) {
       const float cycle = std::fmod(f.time * 1.8f + n * 0.137f, 1.0f);
       const float a = n * 2.399f, rr = r * std::sqrt(std::fmod(n * 0.618f, 1.0f));
-      const float hx = x + std::cos(a) * rr, hy = y + std::sin(a) * rr;
+      const float hx = x + fcos(a) * rr, hy = y + fsin(a) * rr;
       b.line(hx - 8 + cycle * 8, hy - 40 + cycle * 40, hx + cycle * 8, hy - 24 + cycle * 40, 3, A(hex(0xe8fbff), 1 - cycle));
       if (cycle > 0.85f) b.circle(hx + 8, hy + 16, 6 + (cycle - 0.85f) * 60, A(hex(0xe8fbff), 1 - cycle), 1);
     }
@@ -143,7 +146,7 @@ void drawSpecialZone(Frame& f, const Zone& z) {
       b.beginPath();
       for (int k = 0; k <= 24; ++k) {
         const float t = k / 24.0f, a = arm * TAU / 4 - spin * 4 + t * 3.4f, rr = r * (1 - t) + 8;
-        b.lineTo(x + std::cos(a) * rr, y + std::sin(a) * rr);
+        b.lineTo(x + fcos(a) * rr, y + fsin(a) * rr);
       }
       b.stroke(2.5f, A(hex(0xd9c2ff), 0.7f));
     }
@@ -160,7 +163,7 @@ void drawZone(Frame& f, const Zone& z) {
   if (z.warning > 0 || roots) {
     const std::uint32_t c = A(roots ? hex(0x92ed68) : hex(0xffd36b), 0.8f);
     b.circle(x, y, r, c, 2);
-    if (roots) for (int n = 0; n < 8; ++n) { const float a = n * TAU / 8; b.line(x, y, x + std::cos(a) * r, y + std::sin(a) * r, 2, c); }
+    if (roots) for (int n = 0; n < 8; ++n) { const float a = n * TAU / 8; b.line(x, y, x + fcos(a) * r, y + fsin(a) * r, 2, c); }
     else b.text(x, y - 7, "METEORO", 12, hex(0xffe8a8), Align::Center);
   }
 }
@@ -176,7 +179,7 @@ void drawRunesAndHazards(Frame& f) {
     b.beginPath();
     for (int n = 0; n < 5; ++n) {
       const float a = n * TAU * 2 / 5 - HALF_PI + f.time;
-      b.lineTo(x + std::cos(a) * 11, y + std::sin(a) * 11);
+      b.lineTo(x + fcos(a) * 11, y + fsin(a) * 11);
     }
     b.stroke(2, c, true);
   }
@@ -201,10 +204,10 @@ void drawChest(BatchRenderer& b, float x, float y, float time) {
 }
 
 void drawMagnet(BatchRenderer& b, float x, float y, float time) {
-  const float rot = fsin(time * 4) * 0.25f, c = std::cos(rot), s = std::sin(rot);
+  const float rot = fsin(time * 4) * 0.25f, c = fcos(rot), s = fsin(rot);
   auto P = [&](float px, float py) { return SDL_FPoint{x + px * c - py * s, y + px * s + py * c}; };
   b.beginPath();
-  for (int i = 0; i <= 10; ++i) { const float a = static_cast<float>(PI) + static_cast<float>(PI) * i / 10; const auto p = P(std::cos(a) * 10, -2 + std::sin(a) * 10); b.lineTo(p.x, p.y); }
+  for (int i = 0; i <= 10; ++i) { const float a = static_cast<float>(PI) + static_cast<float>(PI) * i / 10; const auto p = P(fcos(a) * 10, -2 + fsin(a) * 10); b.lineTo(p.x, p.y); }
   b.stroke(7, hex(0xe0585f));
   for (float side : {-10.0f, 10.0f}) {
     const auto a = P(side, -2), m = P(side, 8), e = P(side, 13);
@@ -220,7 +223,7 @@ void drawGems(Frame& f) {
     const float x = static_cast<float>(gem.x), y = static_cast<float>(gem.y);
     if (!f.visible(x, y)) continue;
     const float phase = f.time * 2.9f + x * 0.017f + y * 0.013f;
-    const float bob = std::sin(phase) * 3;
+    const float bob = fsin(phase) * 3;
     if (gem.type == "chest") { drawChest(b, x, y + bob, f.time); continue; }
     if (gem.type == "magnet") { drawMagnet(b, x, y + bob, f.time); continue; }
     SpriteId sprite = SpriteId::Gem;
@@ -231,7 +234,7 @@ void drawGems(Frame& f) {
     } else if (gem.type == "greenGem") sprite = SpriteId::GreenGem;
     else if (gem.type == "coin") sprite = SpriteId::Coin;
     else if (gem.type == "heart") sprite = SpriteId::Heart;
-    const float spin = gem.type == "coin" ? 0.2f + std::abs(std::cos(phase)) * 0.8f : 1.0f;
+    const float spin = gem.type == "coin" ? 0.2f + std::abs(fcos(phase)) * 0.8f : 1.0f;
     b.sprite(sprite, x, y + bob, size, 0, std::min(0.95f, static_cast<float>(gem.ttl) / 4), spin, 1);
   }
 }
@@ -327,7 +330,7 @@ void drawFamiliar(BatchRenderer& b, float x, float y, std::uint32_t color, float
   // Wispy tail.
   b.triangle(x - 7 * scale, y + 4 * scale, x + 7 * scale, y + 4 * scale, x + fsin(time * 6 + 1) * 5 * scale, y + 26 * scale, A(color, 0.55f));
   for (float side : {-1.0f, 1.0f}) {
-    const float a = -0.25f - flap * 0.55f, c = std::cos(a), s = std::sin(a);
+    const float a = -0.25f - flap * 0.55f, c = fcos(a), s = fsin(a);
     auto P = [&](float px, float py) { return SDL_FPoint{x + side * (px * c - py * s) * scale, y + (px * s + py * c) * scale}; };
     b.beginPath();
     for (const auto& p : {P(4, -2), P(14, -12), P(26, -4), P(16, 0), P(4, 3)}) b.lineTo(p.x, p.y);
@@ -341,7 +344,7 @@ void drawFamiliar(BatchRenderer& b, float x, float y, std::uint32_t color, float
     b.ellipse(x, y - 14 * scale, 10 * scale, 3.5f * scale, A(hex(0xffe49b), 0.85f), 1.5f);
     for (int n = 0; n < 3; ++n) {
       const float a = time * 2 + n * TAU / 3;
-      b.circle(x + std::cos(a) * 20 * scale, y + std::sin(a) * 20 * scale, 2 * scale, hex(0xffe49b));
+      b.circle(x + fcos(a) * 20 * scale, y + fsin(a) * 20 * scale, 2 * scale, hex(0xffe49b));
     }
   }
 }
@@ -368,7 +371,7 @@ void drawPlayers(Frame& f) {
       if (p.reviveProgress > 0)
         for (int i = 0; i < 3; ++i) {
           const float a = f.time * 2.2f + i * TAU / 3;
-          b.circle(x + std::cos(a) * static_cast<float>(cfg::REVIVE_RADIUS), y + std::sin(a) * static_cast<float>(cfg::REVIVE_RADIUS), 3, hex(0x9dffca));
+          b.circle(x + fcos(a) * static_cast<float>(cfg::REVIVE_RADIUS), y + fsin(a) * static_cast<float>(cfg::REVIVE_RADIUS), 3, hex(0x9dffca));
         }
     }
     if (p.alive && (!p.pendingPowers.empty() || p.invulnerableFor > 0)) {
@@ -394,7 +397,7 @@ void drawPlayers(Frame& f) {
         const double radius = 78 + orbit * 4 + (evolved ? 20 : 0);
         for (int n = 0; n < count; ++n) {
           const double a = p.orbitAngle + n * PI * 2 / count;
-          const float ox = x + static_cast<float>(std::cos(a) * radius), oy = y + static_cast<float>(std::sin(a) * radius);
+          const float ox = x + static_cast<float>(fcos(a) * radius), oy = y + static_cast<float>(fsin(a) * radius);
           b.circle(ox, oy, evolved ? 17.0f : 12.0f, A(color, 0.3f));
           b.circle(ox, oy, evolved ? 8.0f : 5.5f, hex(0xf4fbff));
         }
@@ -470,8 +473,8 @@ void drawEffectsNormal(Frame& f) {
         for (int n = 0; n < 14; ++n) {
           const float a = n * TAU / 14 + fx.seed, bend = (n % 2 ? 1.0f : -1.0f) * 0.5f;
           const float reach = fx.radius * grow * (0.7f + static_cast<float>(n * 37 % 10) / 33.0f);
-          const float cx = fx.x + std::cos(a + bend) * reach * 0.5f, cy = fx.y + std::sin(a + bend) * reach * 0.5f;
-          const float ex = fx.x + std::cos(a) * reach, ey = fx.y + std::sin(a) * reach;
+          const float cx = fx.x + fcos(a + bend) * reach * 0.5f, cy = fx.y + fsin(a + bend) * reach * 0.5f;
+          const float ex = fx.x + fcos(a) * reach, ey = fx.y + fsin(a) * reach;
           auto Q = [&](float t) { const float u = 1 - t; return SDL_FPoint{u * u * fx.x + 2 * u * t * cx + t * t * ex, u * u * fx.y + 2 * u * t * cy + t * t * ey}; };
           for (int pass = 0; pass < 2; ++pass) {
             b.beginPath();
@@ -481,11 +484,11 @@ void drawEffectsNormal(Frame& f) {
           for (int k = 1; k <= 3; ++k) {
             const auto p = Q(k / 4.0f);
             const float side = a + (k % 2 ? 1.0f : -1.0f) * HALF_PI;
-            b.triangle(p.x + std::cos(a) * 4, p.y + std::sin(a) * 4, p.x + std::cos(side) * 9, p.y + std::sin(side) * 9,
-                       p.x - std::cos(a) * 4, p.y - std::sin(a) * 4, A(hex(0xd1ff93), alpha));
+            b.triangle(p.x + fcos(a) * 4, p.y + fsin(a) * 4, p.x + fcos(side) * 9, p.y + fsin(side) * 9,
+                       p.x - fcos(a) * 4, p.y - fsin(a) * 4, A(hex(0xd1ff93), alpha));
           }
-          b.triangle(ex + std::cos(a) * 16, ey + std::sin(a) * 16, ex + std::cos(a + 1.3f) * 6, ey + std::sin(a + 1.3f) * 6,
-                     ex + std::cos(a - 1.3f) * 6, ey + std::sin(a - 1.3f) * 6, A(hex(0xf0ffd2), alpha));
+          b.triangle(ex + fcos(a) * 16, ey + fsin(a) * 16, ex + fcos(a + 1.3f) * 6, ey + fsin(a + 1.3f) * 6,
+                     ex + fcos(a - 1.3f) * 6, ey + fsin(a - 1.3f) * 6, A(hex(0xf0ffd2), alpha));
         }
         break;
       }
@@ -501,11 +504,11 @@ void drawEffectsNormal(Frame& f) {
         if (fx.shape == MoteShape::Flake) {
           for (int n = 0; n < 3; ++n) {
             const float a = rot + n * static_cast<float>(PI) / 3;
-            b.line(fx.x - std::cos(a) * r, fx.y - std::sin(a) * r, fx.x + std::cos(a) * r, fx.y + std::sin(a) * r, 1.5f, A(fx.color, fade));
+            b.line(fx.x - fcos(a) * r, fx.y - fsin(a) * r, fx.x + fcos(a) * r, fx.y + fsin(a) * r, 1.5f, A(fx.color, fade));
           }
         } else if (fx.shape == MoteShape::Leaf) {
           b.ellipse(fx.x, fx.y, r, r * 0.42f, A(fx.color, fade), 0, rot);
-          b.line(fx.x - std::cos(rot) * r, fx.y - std::sin(rot) * r, fx.x + std::cos(rot) * r, fx.y + std::sin(rot) * r, 1, rgba(40, 90, 40, static_cast<std::uint8_t>(153 * fade)));
+          b.line(fx.x - fcos(rot) * r, fx.y - fsin(rot) * r, fx.x + fcos(rot) * r, fx.y + fsin(rot) * r, 1, rgba(40, 90, 40, static_cast<std::uint8_t>(153 * fade)));
         } else if (fx.shape == MoteShape::Heal) {
           b.rect(fx.x - r / 2, fx.y - r / 6, r, r / 3, A(fx.color, fade));
           b.rect(fx.x - r / 6, fx.y - r / 2, r / 3, r, A(fx.color, fade));
@@ -546,12 +549,12 @@ void drawEffectsAdditive(Frame& f) {
           b.glow(fx.x, fx.y, r * 2.4f, fx.color, fade * 0.7f);
           b.circle(fx.x, fx.y, r * 0.45f * fade + 0.8f, A(hex(0xfff1c4), fade));
         } else if (fx.shape == MoteShape::Star) {
-          const float alpha = fade * (0.6f + std::abs(std::sin(fx.age * 18 + fx.size)) * 0.4f);
+          const float alpha = fade * (0.6f + std::abs(fsin(fx.age * 18 + fx.size)) * 0.4f);
           const float rot = fx.spin * fx.age;
           b.beginPath();
           for (int n = 0; n < 8; ++n) {
             const float a = rot + n * static_cast<float>(PI) / 4, d = n % 2 ? r * 0.28f : r;
-            b.lineTo(fx.x + std::cos(a) * d, fx.y + std::sin(a) * d);
+            b.lineTo(fx.x + fcos(a) * d, fx.y + fsin(a) * d);
           }
           b.fill(A(fx.color, alpha));
         }
@@ -563,7 +566,7 @@ void drawEffectsAdditive(Frame& f) {
         b.circle(fx.x, fx.y, radius, A(hex(0xe8fbff), fade), 3 * fade + 1);
         for (int n = 0; n < 12; ++n) {
           const float a = n * TAU / 12 + fx.seed, reach = radius * (0.72f + (n % 3) * 0.1f), len = 26.0f + (n % 4) * 8;
-          const float cx = fx.x + std::cos(a) * reach, cy = fx.y + std::sin(a) * reach, ca = std::cos(a), sa = std::sin(a);
+          const float cx = fx.x + fcos(a) * reach, cy = fx.y + fsin(a) * reach, ca = fcos(a), sa = fsin(a);
           b.quad(cx + ca * len, cy + sa * len, cx + sa * 6, cy - ca * 6, cx - ca * len * 0.4f, cy - sa * len * 0.4f, cx - sa * 6, cy + ca * 6,
                  A(n % 2 ? hex(0xbff4ff) : hex(0x76dfff), fade * 0.9f));
         }
@@ -605,7 +608,7 @@ void drawEffectsAdditive(Frame& f) {
         b.circle(fx.x, fx.y, fx.radius * grow, A(hex(0xd1ff93), fade), 3 * fade + 1);
         for (int n = 0; n < 8; ++n) {
           const float a = n * TAU / 8 + fx.seed + progress;
-          b.ellipse(fx.x + std::cos(a) * 60 * grow, fx.y + std::sin(a) * 60 * grow, 26 * grow, 10 * grow, A(n % 2 ? hex(0xb8f57f) : hex(0xf7ffd9), fade * 0.85f), 0, a);
+          b.ellipse(fx.x + fcos(a) * 60 * grow, fx.y + fsin(a) * 60 * grow, 26 * grow, 10 * grow, A(n % 2 ? hex(0xb8f57f) : hex(0xf7ffd9), fade * 0.85f), 0, a);
         }
         break;
       }
@@ -623,7 +626,7 @@ void drawEffectsAdditive(Frame& f) {
         for (int n = 0; n < 2; ++n) b.circle(fx.x, fx.y, fx.radius * grow * (1 - n * 0.25f), A(n ? fx.color2 : fx.color, fade), 6 * fade + 1);
         for (int n = 0; n < 12; ++n) {
           const float a = n * TAU / 12 + progress * 0.8f;
-          b.line(fx.x + std::cos(a) * 30, fx.y + std::sin(a) * 30, fx.x + std::cos(a) * fx.radius * grow, fx.y + std::sin(a) * fx.radius * grow,
+          b.line(fx.x + fcos(a) * 30, fx.y + fsin(a) * 30, fx.x + fcos(a) * fx.radius * grow, fx.y + fsin(a) * fx.radius * grow,
                  4 * fade, A(n % 2 ? fx.color2 : fx.color, fade));
         }
         break;
@@ -632,7 +635,7 @@ void drawEffectsAdditive(Frame& f) {
         const float head = std::min(1.0f, progress * 3.5f), u = 1 - head;
         for (std::size_t i = 0; i + 1 < fx.points.size(); i += 2) {
           const float tx = fx.points[i], ty = fx.points[i + 1];
-          const float mx = (fx.x + tx) / 2 + std::sin(fx.seed + static_cast<float>(i)) * 40, my = (fx.y + ty) / 2 - 50;
+          const float mx = (fx.x + tx) / 2 + fsin(fx.seed + static_cast<float>(i)) * 40, my = (fx.y + ty) / 2 - 50;
           for (int pass = 0; pass < 2; ++pass) {
             b.beginPath();
             for (int k = 0; k <= 8; ++k) {
@@ -648,7 +651,7 @@ void drawEffectsAdditive(Frame& f) {
       case FxKind::Sigil: {
         const float radius = fx.radius * (0.7f + easeOut(progress) * 0.3f), rot = fx.seed + progress * 0.5f;
         const std::uint32_t c = A(fx.color, fade * fade * 0.7f);
-        auto P = [&](float a, float r) { return SDL_FPoint{fx.x + std::cos(a + rot) * r, fx.y + std::sin(a + rot) * r * 0.42f}; };
+        auto P = [&](float a, float r) { return SDL_FPoint{fx.x + fcos(a + rot) * r, fx.y + fsin(a + rot) * r * 0.42f}; };
         b.ellipse(fx.x, fx.y, radius, radius * 0.42f, c, 2);
         b.beginPath();
         for (int i = 0; i < 6; ++i) { const auto p = P(i * TAU / 6, radius * 0.72f); b.lineTo(p.x, p.y); }
@@ -660,7 +663,7 @@ void drawEffectsAdditive(Frame& f) {
         break;
       }
       case FxKind::Ascend: {
-        const float alpha = std::sin(static_cast<float>(PI) * progress) * fade;
+        const float alpha = fsin(static_cast<float>(PI) * progress) * fade;
         const float radius = fx.radius * (0.4f + easeOut(progress) * 0.6f);
         b.quadGradient(fx.x - 28, fx.y + 24, fx.x - 48, fx.y - 150, fx.x + 48, fx.y - 150, fx.x + 28, fx.y + 24,
                        A(hex(0xffe49b), alpha * 0.3f), A(hex(0xffe49b), 0), A(hex(0xffe49b), 0), A(hex(0xffe49b), alpha * 0.3f));
@@ -679,7 +682,7 @@ void drawNumbers(Frame& f) {
     const float progress = n.age / n.life;
     const float rise = easeOut(progress) * 32;
     const bool big = n.value >= 60 || n.boss;
-    const float pop = 1 + std::round(std::sin(std::min(1.0f, progress / 0.3f) * static_cast<float>(PI)) * 3) * 0.1f;
+    const float pop = 1 + std::round(fsin(std::min(1.0f, progress / 0.3f) * static_cast<float>(PI)) * 3) * 0.1f;
     const float size = (big ? 19.0f : 14.0f) * pop * f.textScale;
     std::snprintf(text, sizeof text, "%d", static_cast<int>(std::lround(n.value)));
     const float alpha = std::min(1.0f, (1 - progress) * 1.6f);
@@ -692,8 +695,10 @@ void drawNumbers(Frame& f) {
 
 void edgeArrow(BatchRenderer& b, const WorldView& v, float worldX, float worldY, std::uint32_t color, const char* label) {
   const float dx = worldX - v.camX, dy = worldY - v.camY;
-  const float angle = std::atan2(dy, dx), c = std::cos(angle), s = std::sin(angle);
-  const float reach = std::min((v.width / 2 - 55) / std::max(0.001f, std::abs(c)), (v.height / 2 - 75) / std::max(0.001f, std::abs(s)));
+  const float angle = std::atan2(dy, dx), c = fcos(angle), s = fsin(angle);
+  // Small screens (PSP) keep the arrows near the edges instead of the 720p margins.
+  const float mx = v.height < 400 ? 22.0f : 55.0f, my = v.height < 400 ? 26.0f : 75.0f;
+  const float reach = std::min((v.width / 2 - mx) / std::max(0.001f, std::abs(c)), (v.height / 2 - my) / std::max(0.001f, std::abs(s)));
   const float x = v.width / 2 + c * reach, y = v.height / 2 + s * reach;
   auto P = [&](float px, float py) { return SDL_FPoint{x + px * c - py * s, y + px * s + py * c}; };
   b.glow(x, y, 26, color, 0.35f);
@@ -729,7 +734,7 @@ void drawWorld(BatchRenderer& b, const GameState& game, const Animator& anim, co
       const float x = static_cast<float>(z.x), y = static_cast<float>(z.y), r = static_cast<float>(z.radius);
       b.glow(x, y, r, hex(0xff8c3c), 0.34f);
       for (int n = 0; n < 10; ++n) {
-        const float a = f.time * 3 + n * TAU / 10, fx = x + std::cos(a) * r * 0.85f, fy = y + std::sin(a) * r * 0.85f;
+        const float a = f.time * 3 + n * TAU / 10, fx = x + fcos(a) * r * 0.85f, fy = y + fsin(a) * r * 0.85f;
         b.glow(fx, fy, 20, hex(0xffb06b), 0.9f);
         b.circle(fx, fy, 5, A(hex(0xfff1c4), 0.72f));
       }
