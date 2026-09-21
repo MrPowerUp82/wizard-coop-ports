@@ -25,6 +25,25 @@ O desktop SDL2 existe para desenvolvimento/testes. Vita e Switch usam/usarão ba
 
 Leia `NATIVE_PORT_STATUS.md` para o estado exato do port, comandos de build (Docker) e controles.
 
+## Build de tudo com Docker
+
+Só é preciso ter o Docker. Um comando compila e testa todos os alvos e junta os resultados em `dist/`:
+
+```powershell
+.	ools\dockeruild-all.ps1              # Windows (PowerShell)
+```
+
+```bash
+tools/docker/build-all.sh                  # Linux, macOS ou Git Bash
+tools/docker/build-all.sh switch vita      # só alguns alvos: host | switch | vita
+```
+
+| Alvo | Imagem | Saída |
+|---|---|---|
+| `host` | `arcana-host` (gerada de `tools/docker/host.Dockerfile`) | testes + `dist/linux/arcana_desktop` |
+| `switch` | `devkitpro/devkita64` | `dist/switch/arcana-survivors.nro` |
+| `vita` | `vitasdk/vitasdk` | `dist/vita/arcana-survivors-native.vpk` |
+
 ## Build do core no PC
 
 ```bash

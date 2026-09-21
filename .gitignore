@@ -10,3 +10,4 @@ platforms/switch/sdl/romfs/
 *.elf
 *.map
 *.vpk
+dist/
