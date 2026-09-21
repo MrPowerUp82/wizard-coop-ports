@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import sys
 import colorsys
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / 'assets'
-OUT = ASSETS / 'native_atlas.png'
-CELL = 256
+# Usage: bake_native_atlas.py [cell]. 256 keeps the master atlas; consoles use 128 (sprites are
+# drawn at 26-195 px, so a 768x768 atlas avoids heavy minification and saves texture bandwidth).
+CELL = int(sys.argv[1]) if len(sys.argv) > 1 else 256
+OUT = ASSETS / ('native_atlas.png' if CELL == 256 else f'native_atlas_{CELL}.png')
 COLS = 6
 
 # Order must match arcana::native::SpriteId (excluding Unknown/Count).

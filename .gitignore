@@ -3,3 +3,10 @@ arcana_profile.ini
 *.exe
 *.pdb
 *.o
+platforms/switch/sdl/build/
+platforms/switch/sdl/romfs/
+*.nro
+*.nacp
+*.elf
+*.map
+*.vpk

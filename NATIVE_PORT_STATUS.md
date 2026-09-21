@@ -1,4 +1,81 @@
-# Native Port Status — Stage 1
+# Native Port Status
+
+## Stage 2 — jogo jogável em PC, Switch e Vita (2026-09-21)
+
+Um único frontend nativo (`platforms/sdl/`) roda nos três alvos. Cada plataforma só tem um
+`main.cpp` com init, caminhos de assets e leitura de input.
+
+- **Renderer em lote (`BatchRenderer`)**: sprites, formas e texto saem de **uma textura**
+  (atlas 128 px + texel branco + glifos pré-renderizados). Um frame inteiro vira normalmente
+  **1 chamada `SDL_RenderGeometry`**, e os buffers são reservados uma vez só.
+- **Frontend (`Frontend`)**: menu com escolha de ritual (rápido/clássico/infinito), entrada de
+  até 4 jogadores locais, HUD por jogador, barra de chefe, escolha de poderes com reroll, pausa,
+  fim de partida e overlay de desempenho (F3 / Select / clique dos analógicos).
+- **Render queue** agora desenha também orbes, aura, runas, familiar, zonas, alertas, altar,
+  encontros, raios em cadeia, explosões, jogadores caídos/reviver e barras de vida.
+- **Co-op em tela compartilhada**: câmera centraliza e afasta o zoom; jogadores ficam "presos"
+  à área visível (`leashPlayers`).
+- **Switch**: `platforms/switch/sdl` → `arcana-survivors.nro` (libnx + SDL2/mesa). Input direto
+  da HID (portátil, par, Joy-Con único na horizontal, Pro), mesmo mapeamento do port nx.js.
+  Fonte do sistema (`pl`), atlas no romfs.
+- **Vita**: `platforms/vita/sdl` → `arcana-survivors-native.vpk` (SDL2 com renderer "VITA gxm").
+  Clocks 444/222/222/166, SceCtrl direto, fonte DejaVu embutida.
+- **Toolchains via Docker** (nada instalado no Windows): ver "Builds" abaixo.
+
+### Correção nos testes
+
+`tests/*.cpp` usavam `assert` e eram compilados em Release (`NDEBUG`), então **nenhuma asserção
+rodava**. Agora os testes forçam `#undef NDEBUG`. Com isso o teste de hot path revelou que o
+cenário deixava o timeout de escolha de poder (15 s) disparar `applyPower` no meio da medição; o
+teste agora mantém a janela de escolha aberta. A simulação + `buildRenderQueue` seguem com
+**0 alocações** após o aquecimento.
+
+### Builds (Docker)
+
+```bash
+# PC/Linux: core, testes e frontend SDL2 (também gera screenshots/benchmarks headless)
+docker build -t arcana-host -f tools/docker/host.Dockerfile tools/docker
+docker run --rm -v "$PWD":/src -w /src arcana-host bash tools/docker/host-build.sh
+docker run --rm -v "$PWD":/src -w /src/build-linux arcana-host ./arcana_desktop --autoplay 2 --perf --frames 2400 --screenshot shots/play.png
+
+# Switch -> platforms/switch/sdl/arcana-survivors.nro
+docker run --rm -v "$PWD":/src -w /src devkitpro/devkita64 bash tools/docker/switch-build.sh
+
+# Vita -> build-vita/arcana-survivors-native.vpk
+docker run --rm -v "$PWD":/src -w /src vitasdk/vitasdk bash tools/docker/vita-build.sh
+```
+
+No Git Bash do Windows, prefixe com `MSYS_NO_PATHCONV=1` e use `"$(pwd -W)"` no lugar de `"$PWD"`.
+
+### Controles
+
+| Ação | Switch (Pro/portátil/par) | Joy-Con único | Vita | PC |
+|---|---|---|---|---|
+| Mover | analógico / direcional | analógico | analógico / direcional | WASD / setas |
+| Especial | A, R, ZR | SL ou botão da direita | ✕, R | Espaço |
+| Esquiva | B, L, ZL | SR ou botão de baixo | ○, L | Shift |
+| Trocar opções | X, Y | botões de cima/esquerda | □, △ | R |
+| Pausa | + / − | + ou − | Start | Esc |
+| Desempenho | clique do analógico | clique do analógico | Select | F3 |
+
+### O que medir no hardware
+
+Ative o overlay de desempenho e anote `fps`, `frame` (CPU do frame), `sim`, `queue` e `draw`
+com a tela cheia (fase 3+ ou chefe). Se `fps` < 60 com `frame` baixo, o gargalo é GPU/driver.
+Aí vale considerar deko3d (Switch) ou reduzir overdraw.
+
+### Pendências
+
+1. Validar no hardware: FPS, orientação do analógico do Joy-Con único (`kRotateSingleJoyCon`),
+   renderer GXM do Vita.
+2. Terreno/tiles por fase (hoje: cor da fase + grade), animações e efeitos do cliente web.
+3. Áudio (SDL_mixer está disponível nos dois SDKs).
+4. Meta-progressão/loja/Códex e persistência por console (`profile.cpp`).
+5. Trocar strings por IDs nas entidades quentes (tipo de inimigo, drop, sprite).
+
+---
+
+## Stage 1 — fundação nativa
 
 Data: 2026-09-19
 

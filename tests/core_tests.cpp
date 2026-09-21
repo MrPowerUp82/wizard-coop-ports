@@ -1,3 +1,5 @@
+// Tests rely on assert(); keep it active in Release builds.
+#undef NDEBUG
 #include "arcana/game.hpp"
 #include <cassert>
 #include <cmath>

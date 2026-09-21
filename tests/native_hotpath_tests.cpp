@@ -1,3 +1,5 @@
+// Tests rely on assert(); keep it active in Release builds.
+#undef NDEBUG
 #include "arcana/game.hpp"
 #include "arcana/native/render_queue.hpp"
 #include "arcana/native/spatial_grid.hpp"
@@ -64,6 +66,7 @@ int main() {
   static native::RenderQueue queue;
   native::Camera camera{};
   for (int i = 0; i < 600; ++i) {
+    p.powerTimer = 0;
     updateGame(game, 1.0 / 60.0, rng);
     camera.x = static_cast<float>(p.x);
     camera.y = static_cast<float>(p.y);
@@ -72,6 +75,8 @@ int main() {
 
   const auto before = allocations.load(std::memory_order_relaxed);
   for (int i = 0; i < 600; ++i) {
+    // Stay inside the choice window: POWER_TIMEOUT would auto-pick a power (a UI event, not hot path).
+    p.powerTimer = 0;
     updateGame(game, 1.0 / 60.0, rng);
     native::buildRenderQueue(game, camera, queue);
   }

@@ -19,7 +19,11 @@ O desktop SDL2 existe para desenvolvimento/testes. Vita e Switch usam/usarão ba
 - `tests/native_hotpath_tests.cpp` — valida containers/grid e ausência de heap no hot path após aquecimento.
 - `tools/native_bench.cpp` — benchmarks sintéticos reproduzíveis.
 
-Leia `NATIVE_PORT_STATUS.md` para o estado exato do port e as medições desta etapa.
+- `platforms/sdl/` — frontend nativo compartilhado (renderer em lote, menu, HUD, co-op) usado por PC, Switch e Vita.
+- `platforms/switch/sdl/`, `platforms/vita/sdl/`, `platforms/desktop/` — `main.cpp` de cada plataforma.
+- `tools/docker/` — builds reproduzíveis (host, devkitPro, VitaSDK) sem instalar toolchains.
+
+Leia `NATIVE_PORT_STATUS.md` para o estado exato do port, comandos de build (Docker) e controles.
 
 ## Build do core no PC
 
@@ -28,7 +32,7 @@ cmake -S . -B build \
   -DARCANA_BUILD_SERVER=OFF \
   -DARCANA_BUILD_CLIENT=OFF \
   -DARCANA_BUILD_NET=OFF \
-  -DCMAKE_BUILD_TESTS=ON \
+  -DARCANA_BUILD_TESTS=ON \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ctest --test-dir build --output-on-failure

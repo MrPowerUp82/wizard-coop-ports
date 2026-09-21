@@ -19,10 +19,11 @@
 | `server/encounters.js` | core | Migrado |
 | arrays dinâmicos de entidades | `native::StaticVector` | Migrados nos containers quentes para evitar realloc/erase de heap |
 | loop variável do browser | `native::FixedStep` | 60 Hz determinístico nos runtimes nativos |
-| `src/render.js`/Canvas | `native::RenderQueue` + backend da plataforma | Separado do core; Vita backend já implementado, Switch deko3d é próxima etapa |
+| `src/render.js`/Canvas | `native::RenderQueue` + `platforms/sdl/batch_renderer` | Um atlas, ~1 draw call/frame; mesmo código em PC, Switch e Vita |
+| `src/main.js`, `hud.js`, `menu.js`, `localCoop.js` | `platforms/sdl/frontend` | Menu, co-op local (4), HUD, escolha de poderes, pausa, fim de jogo |
 | sprites WebP/recolorização | `assets/native_atlas.png` | Pré-baked; sem WebP/recolor em runtime de console |
-| `platforms/vita` JS/QuickJS | `platforms/vita/native` | Novo runtime C++/VitaSDK/libvita2d; fonte pronta para cross-build/hardware test |
-| `platforms/switch` nx.js | `platforms/switch/native_probe` | Core libnx nativo implementado; renderer deko3d ainda pendente |
+| `platforms/vita` JS/QuickJS | `platforms/vita/sdl` | SDL2/GXM + frontend compartilhado; `.vpk` compila via Docker. (`platforms/vita/native` = protótipo vita2d antigo, ID ARCA00002) |
+| `platforms/switch` nx.js | `platforms/switch/sdl` | libnx + SDL2 + frontend compartilhado; `.nro` compila via Docker. `native_probe` segue como medidor de CPU |
 | `server/server.js` | `server/main.cpp` | Servidor Boost.Beast existente para multiplayer |
 | `src/net.js` | `client/network.cpp` | Cliente desktop C++ existente |
 | `src/wallet.js`/`localStorage` | `src/profile.cpp` | Persistência nativa em arquivo |

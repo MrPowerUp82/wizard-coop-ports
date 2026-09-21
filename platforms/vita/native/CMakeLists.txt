@@ -30,8 +30,8 @@ target_link_libraries(arcana_vita PRIVATE
 )
 
 vita_create_self(eboot.bin arcana_vita SAFE)
-vita_create_vpk(arcana-survivors.vpk ARCA00001 eboot.bin
+vita_create_vpk(arcana-survivors.vpk ARCA00002 eboot.bin
   VERSION 00.30
-  NAME "Arcana Survivors"
+  NAME "Arcana vita2d probe"
   FILE ${PROJECT_ROOT}/assets/native_atlas.png assets/native_atlas.png
 )
