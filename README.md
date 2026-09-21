@@ -30,7 +30,7 @@ Leia `NATIVE_PORT_STATUS.md` para o estado exato do port, comandos de build (Doc
 Só é preciso ter o Docker. Um comando compila e testa todos os alvos e junta os resultados em `dist/`:
 
 ```powershell
-.	ools\dockeruild-all.ps1              # Windows (PowerShell)
+.	oolsdockerbuild-all.ps1              # Windows (PowerShell)
 ```
 
 ```bash
