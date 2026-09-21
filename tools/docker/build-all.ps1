@@ -1,14 +1,66 @@
-# Windows/PowerShell entry point for tools/docker/build-all.sh (runs it through Git Bash).
-#   .\tools\docker\build-all.ps1               # every target
-#   .\tools\docker\build-all.ps1 switch vita   # only some
+# Builds every target in Docker and collects the results in dist\. Native PowerShell (5.1 or 7):
+# only Docker Desktop is needed, no Git Bash/WSL.
+#
+#   .\tools\docker\build-all.ps1               # host tests + Linux desktop + Switch + Vita
+#   .\tools\docker\build-all.ps1 switch vita   # only some targets (host | switch | vita)
+#
+# Or double-click build.cmd in the repository root.
+param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Targets)
+
 $ErrorActionPreference = 'Stop'
-$bash = @(
-  "$env:ProgramFiles\Git\bin\bash.exe",
-  "${env:ProgramFiles(x86)}\Git\bin\bash.exe"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $bash) { throw 'Git Bash nao encontrado. Instale o Git for Windows ou rode build-all.sh em outro shell.' }
+$Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+Set-Location $Root
+
 docker info *> $null
-if ($LASTEXITCODE -ne 0) { throw 'Docker nao esta rodando. Abra o Docker Desktop e tente de novo.' }
-$script = Join-Path $PSScriptRoot 'build-all.sh'
-& $bash $script @args
-exit $LASTEXITCODE
+if ($LASTEXITCODE -ne 0) { Write-Host 'Docker nao esta rodando. Abra o Docker Desktop e tente de novo.' -ForegroundColor Red; exit 1 }
+if (-not $Targets -or $Targets.Count -eq 0) { $Targets = @('host', 'switch', 'vita') }
+
+function Invoke-Container([string]$Image, [string]$Script) {
+  # The scripts run inside Linux containers; the repo keeps them LF-only (.gitattributes).
+  docker run --rm -v "${Root}:/src" -w /src $Image bash $Script
+  return ($LASTEXITCODE -eq 0)
+}
+
+New-Item -ItemType Directory -Force dist | Out-Null
+$results = [ordered]@{}
+foreach ($target in $Targets) {
+  Write-Host "==> $target" -ForegroundColor Cyan
+  switch ($target) {
+    'host' {
+      docker build -q -t arcana-host -f tools/docker/host.Dockerfile tools/docker | Out-Null
+      if (Invoke-Container 'arcana-host' 'tools/docker/host-build.sh') {
+        New-Item -ItemType Directory -Force dist\linux\fonts | Out-Null
+        Copy-Item build-linux\arcana_desktop dist\linux\ -Force
+        Copy-Item assets\native_atlas_128.png, assets\terrain_tiles.png dist\linux\ -Force
+        Copy-Item assets\fonts\* dist\linux\fonts\ -Force
+        $results[$target] = 'ok  dist\linux\arcana_desktop (testes passaram)'
+      } else { $results[$target] = 'FALHOU' }
+    }
+    'switch' {
+      if (Invoke-Container 'devkitpro/devkita64' 'tools/docker/switch-build.sh') {
+        New-Item -ItemType Directory -Force dist\switch | Out-Null
+        Copy-Item platforms\switch\sdl\arcana-survivors.nro dist\switch\ -Force
+        $results[$target] = 'ok  dist\switch\arcana-survivors.nro'
+      } else { $results[$target] = 'FALHOU' }
+    }
+    'vita' {
+      if (Invoke-Container 'vitasdk/vitasdk' 'tools/docker/vita-build.sh') {
+        New-Item -ItemType Directory -Force dist\vita | Out-Null
+        Copy-Item build-vita\arcana-survivors-native.vpk dist\vita\ -Force
+        $results[$target] = 'ok  dist\vita\arcana-survivors-native.vpk'
+      } else { $results[$target] = 'FALHOU' }
+    }
+    default { Write-Host "alvo desconhecido: $target (use host, switch ou vita)" -ForegroundColor Red; exit 2 }
+  }
+}
+
+Write-Host ''
+Write-Host 'Resumo:'
+$failed = $false
+foreach ($key in $results.Keys) {
+  $color = 'Green'
+  if ($results[$key] -eq 'FALHOU') { $color = 'Red'; $failed = $true }
+  Write-Host ('  {0,-7} {1}' -f $key, $results[$key]) -ForegroundColor $color
+}
+if ($failed) { exit 1 }
+exit 0
