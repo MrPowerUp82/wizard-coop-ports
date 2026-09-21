@@ -48,6 +48,8 @@ SPRITES = [
     ('greenGem','sprites',(313.5,940.5,313.5,313.5),None),
     ('coin','sprites',(627,940.5,313.5,313.5),None),
     ('heart','sprites',(940.5,940.5,313.5,313.5),None),
+    ('gemRare','sprites',(0,940.5,313.5,313.5),(70,1.0,1.0)),
+    ('gemEpic','sprites',(0,940.5,313.5,313.5),(170,1.2,1.0)),
 ]
 
 sources = {

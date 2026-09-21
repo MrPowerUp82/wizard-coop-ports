@@ -28,6 +28,7 @@ struct Args {
   int width{1280}, height{720};
   int frames{-1};         // headless: stop after N frames
   double benchSeconds{};  // headless benchmark with fixed 1/60 frames
+  int shotsEvery{};       // headless: also save <screenshot>-NNNN.png every N frames
 };
 
 Args parseArgs(int argc, char** argv) {
@@ -37,6 +38,8 @@ Args parseArgs(int argc, char** argv) {
     auto next = [&](const char* fallback) { return i + 1 < argc ? std::string(argv[++i]) : std::string(fallback); };
     if (k == "--autoplay") { a.frontend.autoplay = true; if (i + 1 < argc && argv[i + 1][0] != '-') a.frontend.autoplayPlayers = std::atoi(argv[++i]); }
     else if (k == "--perf") a.frontend.showPerf = true;
+    else if (k == "--charged") a.frontend.debugCharge = true;
+    else if (k == "--shots-every") a.shotsEvery = std::atoi(next("60").c_str());
     else if (k == "--campaign") a.frontend.campaign = next("quick");
     else if (k == "--play") a.frontend.startImmediately = true;
     else if (k == "--atlas") a.atlas = next("");
@@ -151,6 +154,8 @@ int main(int argc, char** argv) {
   const std::string atlasPath = findAsset(args.atlas, {"native_atlas_128.png", "native_atlas.png"});
   SDL_Surface* atlas = atlasPath.empty() ? nullptr : IMG_Load(atlasPath.c_str());
   if (!atlas) { std::fprintf(stderr, "atlas not found (%s): %s\n", atlasPath.c_str(), IMG_GetError()); return 1; }
+  const std::string terrainPath = findAsset("", {"terrain_tiles.png"});
+  SDL_Surface* terrain = terrainPath.empty() ? nullptr : IMG_Load(terrainPath.c_str()); // optional
   const std::string fontPath = findAsset(args.font, {"fonts/DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
                                                      "C:/Windows/Fonts/segoeuib.ttf", "C:/Windows/Fonts/arialbd.ttf"});
   TTF_Font* font = fontPath.empty() ? nullptr : TTF_OpenFont(fontPath.c_str(), kFontBakePx);
@@ -159,8 +164,9 @@ int main(int argc, char** argv) {
   BatchRenderer batch;
   std::string error;
   const int cell = atlas->w / 6;
-  if (!batch.init(renderer, atlas, cell, 6, font, error)) { std::fprintf(stderr, "renderer init: %s\n", error.c_str()); return 1; }
+  if (!batch.init(renderer, atlas, cell, 6, terrain, font, error)) { std::fprintf(stderr, "renderer init: %s\n", error.c_str()); return 1; }
   SDL_FreeSurface(atlas);
+  if (terrain) SDL_FreeSurface(terrain);
   TTF_CloseFont(font);
   std::printf("renderer=%s atlas=%s font=%s\n", info.name, atlasPath.c_str(), fontPath.c_str());
 
@@ -210,6 +216,14 @@ int main(int argc, char** argv) {
       sumFrame += cpuMs; worstFrame = std::max(worstFrame, cpuMs); sumBuild += frontend->buildMs();
     }
 
+    if (args.shotsEvery > 0 && !args.screenshot.empty() && frames % args.shotsEvery == 0) {
+      char name[512];
+      std::snprintf(name, sizeof name, "%s-%05d.png", args.screenshot.substr(0, args.screenshot.size() - 4).c_str(), frames);
+      SDL_Surface* shot = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888);
+      SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_ARGB8888, shot->pixels, shot->pitch);
+      IMG_SavePNG(shot, name);
+      SDL_FreeSurface(shot);
+    }
     if (frameLimit > 0 && frames >= frameLimit) {
       if (!args.screenshot.empty()) {
         SDL_Surface* shot = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888);

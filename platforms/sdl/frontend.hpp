@@ -3,7 +3,9 @@
 #include "arcana/game.hpp"
 #include "arcana/native/fixed_step.hpp"
 #include "arcana/native/render_queue.hpp"
+#include "animator.hpp"
 #include "batch_renderer.hpp"
+#include "world_renderer.hpp"
 
 #include <array>
 #include <cstdint>
@@ -34,6 +36,7 @@ struct FrontendOptions {
   int autoplayPlayers{1};
   std::string campaign{"quick"};
   bool startImmediately{};
+  bool debugCharge{};   // autoplay: specials always charged (effects soak test)
 };
 
 struct FrameTimings { double updateMs{}, buildMs{}, frameMs{}; int steps{}; };
@@ -74,7 +77,9 @@ private:
   Player* chooser(int* slotOut = nullptr);
 
   void renderWorld(BatchRenderer& batch, float width, float height);
-  void renderBackground(BatchRenderer& batch, float width, float height, const native::Camera& cam);
+  void renderFeedback(BatchRenderer& batch, float width, float height);
+  void observeEvents();
+  void announce(std::string text, std::uint32_t color, bool toast = false);
   void renderHud(BatchRenderer& batch, float width, float height);
   void renderChooser(BatchRenderer& batch, float width, float height);
   void renderTitle(BatchRenderer& batch, float width, float height);
@@ -87,7 +92,13 @@ private:
   GameState state_{};
   DefaultRandom random_{};
   native::FixedStep clock_{60.0, 4};
-  native::RenderQueue queue_{};
+  Animator anim_{};
+  struct Banner { std::string text; std::uint32_t color{}; double age{99}, life{2.8}; };
+  Banner announce_, toast_;
+  std::uint64_t feedbackEventId_{};
+  bool feedbackPrimed_{};
+  double hurtFlash_{};
+  std::array<double, cfg::MAX_PLAYERS> lastHp_{};
   native::Camera camera_{};
   std::array<PadEdges, cfg::MAX_PLAYERS> edges_{};
   std::array<bool, cfg::MAX_PLAYERS> joined_{true, false, false, false};

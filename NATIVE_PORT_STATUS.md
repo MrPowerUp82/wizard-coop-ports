@@ -1,5 +1,30 @@
 # Native Port Status
 
+## Stage 3 — efeitos e animações do cliente web (2026-09-21)
+
+- `platforms/sdl/animator.*`: port do `src/animation.js` com pools fixos (192 efeitos, 64 números,
+  256 atores). Poses por ator (passada, respiração, squash ao levar dano, recuo ao conjurar, queda
+  ao cair), faíscas, anéis, partículas (neve, brasas, folhas, estrelas, cura, fumaça), efeito de cada
+  especial (nova, meteoro, espinhos, lua; e as variantes do "Segundo feitiço"), raios irregulares,
+  golpes do familiar, sigilos de conjuração, "NÍVEL +", combos, convergência, afterimages da
+  esquiva, fantasmas de morte, números de dano, screen shake, flash de tela e hit-stop.
+- `platforms/sdl/world_renderer.*`: port do `renderWorld()` do `src/render.js`. Inclui chão em tiles
+  por fase (`assets/terrain_tiles.png`, gerado por `tools/assets/bake_terrain.py` com o mesmo
+  algoritmo do `terrain.js`), atmosfera, altar, mercador/santuário, zonas (granizo, escudo de
+  chamas, vórtice, raízes, meteoro), runas, alertas, baú/ímã, gemas raras/épicas, rastros dos tiros,
+  aviso de investida, marcadores de elite/ladrão/congelado, aura, órbitas, familiar animado, anel
+  de especial pronto, reviver e setas para alvos fora da tela.
+- HUD: anúncios e toasts dos eventos (port do `feedback.js`), vinheta vermelha de dano e de vida baixa.
+- `BatchRenderer`: modo aditivo (o "lighter" do canvas), glow radial, silhuetas brancas para o
+  flash de dano, elipses, arcos, polígonos, gradientes e texto com contorno. Tudo continua saindo de
+  uma única textura; só a troca normal↔aditivo gera outra chamada de desenho (~6–8 por frame).
+- Core: eventos `combo` levam reação e se é em equipe, `special` da lua leva a origem do salto,
+  explosões `boom` levam o raio.
+- Vita: o link usa uma cópia do script padrão com 8 KiB de folga antes de `.data`. Sem isso, o
+  `vita-elf-create` falha com "segment 1 overlaps" quando o código termina perto de 64 KiB.
+
+Captura headless para inspecionar efeitos: `./arcana_desktop --autoplay 4 --charged --frames 1800 --shots-every 20 --screenshot shots/s.png`.
+
 ## Stage 2 — jogo jogável em PC, Switch e Vita (2026-09-21)
 
 Um único frontend nativo (`platforms/sdl/`) roda nos três alvos. Cada plataforma só tem um

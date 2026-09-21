@@ -77,15 +77,17 @@ int main(int, char**) {
   SDL_SetHint(SDL_HINT_RENDER_DRIVER, "VITA gxm");
   SDL_Renderer* renderer = window ? SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC) : nullptr;
   SDL_Surface* atlas = IMG_Load("app0:/assets/native_atlas_128.png");
+  SDL_Surface* terrain = IMG_Load("app0:/assets/terrain_tiles.png"); // optional
   TTF_Font* font = TTF_OpenFont("app0:/assets/fonts/DejaVuSans-Bold.ttf", kFontBakePx);
   BatchRenderer batch;
   std::string error;
-  if (!renderer || !atlas || !font || !batch.init(renderer, atlas, atlas->w / 6, 6, font, error)) {
+  if (!renderer || !atlas || !font || !batch.init(renderer, atlas, atlas->w / 6, 6, terrain, font, error)) {
     SDL_Log("Arcana init failed: %s %s", SDL_GetError(), error.c_str());
     sceKernelExitProcess(1);
     return 1;
   }
   SDL_FreeSurface(atlas);
+  if (terrain) SDL_FreeSurface(terrain);
   TTF_CloseFont(font);
 
   auto frontend = std::make_unique<Frontend>();

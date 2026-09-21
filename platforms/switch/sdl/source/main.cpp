@@ -137,6 +137,8 @@ int main(int argc, char** argv) {
   SDL_Surface* atlas = IMG_Load("romfs:/native_atlas_128.png");
   if (!atlas) { fatal("Atlas ausente no romfs", IMG_GetError()); return 1; }
 
+  SDL_Surface* terrain = IMG_Load("romfs:/terrain_tiles.png"); // optional
+
   // The console's shared system font: no TTF shipped in the .nro.
   PlFontData fontData{};
   TTF_Font* font = nullptr;
@@ -146,8 +148,9 @@ int main(int argc, char** argv) {
 
   BatchRenderer batch;
   std::string error;
-  if (!batch.init(renderer, atlas, atlas->w / 6, 6, font, error)) { fatal("Falha ao preparar texturas", error.c_str()); return 1; }
+  if (!batch.init(renderer, atlas, atlas->w / 6, 6, terrain, font, error)) { fatal("Falha ao preparar texturas", error.c_str()); return 1; }
   SDL_FreeSurface(atlas);
+  if (terrain) SDL_FreeSurface(terrain);
   TTF_CloseFont(font);
   appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
 

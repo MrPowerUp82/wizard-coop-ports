@@ -68,7 +68,7 @@ SpriteId spriteForEnemy(const Enemy& enemy) { return spriteFromName(enemy.type);
 SpriteId spriteForEnemyShot(const EnemyShot& shot) { return spriteFromName(shot.sprite); }
 
 std::uint32_t playerColor(int color, std::uint8_t alpha) {
-  static constexpr std::uint32_t colors[4] = {rgba(118, 223, 255), rgba(255, 120, 72), rgba(126, 225, 98), rgba(194, 145, 255)};
+  static constexpr std::uint32_t colors[4] = {rgba(118, 223, 255), rgba(255, 153, 85), rgba(146, 237, 104), rgba(196, 160, 255)};
   return withAlpha(colors[std::clamp(color, 0, 3)], alpha);
 }
 

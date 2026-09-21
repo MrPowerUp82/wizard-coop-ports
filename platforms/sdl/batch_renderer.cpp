@@ -9,7 +9,9 @@ namespace {
 constexpr int kMaxVertices = 32768;
 constexpr int kMaxIndices = kMaxVertices * 3 / 2;
 constexpr int kWhiteSize = 4;
+constexpr int kGlowSize = 64;
 constexpr int kGlyphPadding = 2;
+constexpr float kTerrainTile = 256.0f;
 
 int nextPow2(int v) { int p = 1; while (p < v) p <<= 1; return p; }
 
@@ -24,7 +26,7 @@ std::uint32_t decodeUtf8(std::string_view s, std::size_t& i) {
   return cp;
 }
 
-// Shelf packer over up to two free rectangles (right of and below the sprite atlas).
+// Shelf packer over up to two free rectangles.
 struct Packer {
   SDL_Rect areas[2]{};
   int area{}, x{}, y{}, shelf{};
@@ -45,30 +47,72 @@ struct Packer {
 
 } // namespace
 
-bool BatchRenderer::init(SDL_Renderer* renderer, SDL_Surface* atlas, int cell, int cols, TTF_Font* font, std::string& error) {
+SDL_Color BatchRenderer::unpack(std::uint32_t c, float alpha) {
+  const float a = static_cast<float>(c >> 24) * std::clamp(alpha, 0.0f, 1.0f);
+  return SDL_Color{static_cast<Uint8>(c & 0xff), static_cast<Uint8>((c >> 8) & 0xff), static_cast<Uint8>((c >> 16) & 0xff), static_cast<Uint8>(a)};
+}
+
+bool BatchRenderer::init(SDL_Renderer* renderer, SDL_Surface* atlas, int cell, int cols, SDL_Surface* terrain, TTF_Font* font, std::string& error) {
   renderer_ = renderer;
-  const int size = nextPow2(std::max(atlas->w + 256, atlas->h));
-  SDL_Surface* sheet = SDL_CreateRGBSurfaceWithFormat(0, size, size, 32, SDL_PIXELFORMAT_ABGR8888);
+  const int terrainH = terrain ? terrain->h : 0;
+  const int width = nextPow2(atlas->w * 2 + 256), height = nextPow2(atlas->h + terrainH);
+  SDL_Surface* sheet = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ABGR8888);
   if (!sheet) { error = SDL_GetError(); return false; }
   SDL_FillRect(sheet, nullptr, 0);
   SDL_SetSurfaceBlendMode(atlas, SDL_BLENDMODE_NONE);
   SDL_BlitSurface(atlas, nullptr, sheet, nullptr);
+  SDL_Rect silhouetteAt{atlas->w, 0, atlas->w, atlas->h};
+  SDL_BlitSurface(atlas, nullptr, sheet, &silhouetteAt);
+  // Hit-flash silhouettes: same alpha, pure white. Replaces the web client's baked flash canvases.
+  for (int y = 0; y < atlas->h; ++y) {
+    auto* row = reinterpret_cast<Uint32*>(static_cast<Uint8*>(sheet->pixels) + y * sheet->pitch) + atlas->w;
+    for (int x = 0; x < atlas->w; ++x) row[x] = (row[x] & 0xff000000u) | 0x00ffffffu;
+  }
 
-  const float inv = 1.0f / static_cast<float>(size);
+  const float iw = 1.0f / static_cast<float>(width), ih = 1.0f / static_cast<float>(height);
+  auto uv = [&](float x, float y, float w, float h, float inset) {
+    return UvRect{(x + inset) * iw, (y + inset) * ih, (x + w - inset) * iw, (y + h - inset) * ih};
+  };
   // Half-texel inset keeps linear filtering from sampling the neighbouring cell.
   for (int i = 0; i < static_cast<int>(native::SpriteId::Unknown); ++i) {
     const float x = static_cast<float>((i % cols) * cell), y = static_cast<float>((i / cols) * cell);
-    sprites_[static_cast<std::size_t>(i)] = {(x + 0.5f) * inv, (y + 0.5f) * inv, (x + cell - 0.5f) * inv, (y + cell - 0.5f) * inv};
+    sprites_[static_cast<std::size_t>(i)] = uv(x, y, static_cast<float>(cell), static_cast<float>(cell), 0.5f);
+    silhouettes_[static_cast<std::size_t>(i)] = uv(x + static_cast<float>(atlas->w), y, static_cast<float>(cell), static_cast<float>(cell), 0.5f);
+  }
+
+  if (terrain && terrain->w <= atlas->w * 2) {
+    SDL_Rect at{0, atlas->h, terrain->w, terrain->h};
+    SDL_SetSurfaceBlendMode(terrain, SDL_BLENDMODE_NONE);
+    SDL_BlitSurface(terrain, nullptr, sheet, &at);
+    terrainCount_ = std::min(static_cast<int>(terrain_.size()), terrain->w / terrain->h);
+    for (int i = 0; i < terrainCount_; ++i)
+      terrain_[static_cast<std::size_t>(i)] = uv(static_cast<float>(i * terrain->h), static_cast<float>(atlas->h),
+                                                 static_cast<float>(terrain->h), static_cast<float>(terrain->h), 1.0f);
   }
 
   Packer packer;
-  packer.areas[0] = {atlas->w, 0, size - atlas->w, size};
-  packer.areas[1] = {0, atlas->h, atlas->w, size - atlas->h};
+  packer.areas[0] = {atlas->w * 2, 0, width - atlas->w * 2, height};
+  packer.areas[1] = {0, atlas->h + terrainH, atlas->w * 2, height - atlas->h - terrainH};
+
   SDL_Rect whiteRect{};
   if (!packer.place(kWhiteSize, kWhiteSize, whiteRect)) { error = "no room for white texel"; SDL_FreeSurface(sheet); return false; }
   SDL_FillRect(sheet, &whiteRect, SDL_MapRGBA(sheet->format, 255, 255, 255, 255));
-  const float wc = (static_cast<float>(whiteRect.x) + kWhiteSize * 0.5f) * inv, wr = (static_cast<float>(whiteRect.y) + kWhiteSize * 0.5f) * inv;
+  const float wc = (static_cast<float>(whiteRect.x) + kWhiteSize * 0.5f) * iw, wr = (static_cast<float>(whiteRect.y) + kWhiteSize * 0.5f) * ih;
   white_ = {wc, wr, wc, wr};
+
+  // Soft radial glow (white centre fading linearly to transparent), tinted per draw: this is the
+  // web client's drawSoftGlow / cachedGlow.
+  SDL_Rect glowRect{};
+  if (!packer.place(kGlowSize, kGlowSize, glowRect)) { error = "no room for glow"; SDL_FreeSurface(sheet); return false; }
+  for (int y = 0; y < kGlowSize; ++y) {
+    auto* row = reinterpret_cast<Uint32*>(static_cast<Uint8*>(sheet->pixels) + (glowRect.y + y) * sheet->pitch) + glowRect.x;
+    for (int x = 0; x < kGlowSize; ++x) {
+      const float dx = (x + 0.5f) / (kGlowSize * 0.5f) - 1, dy = (y + 0.5f) / (kGlowSize * 0.5f) - 1;
+      const float a = std::clamp(1.0f - std::sqrt(dx * dx + dy * dy), 0.0f, 1.0f);
+      row[x] = SDL_MapRGBA(sheet->format, 255, 255, 255, static_cast<Uint8>(a * 255));
+    }
+  }
+  glow_ = uv(static_cast<float>(glowRect.x), static_cast<float>(glowRect.y), kGlowSize, kGlowSize, 0.5f);
 
   fontHeight_ = static_cast<float>(TTF_FontHeight(font));
   const SDL_Color white{255, 255, 255, 255};
@@ -86,7 +130,7 @@ bool BatchRenderer::init(SDL_Renderer* renderer, SDL_Surface* atlas, int cell, i
     if (packer.place(bitmap->w, bitmap->h, dst)) {
       SDL_SetSurfaceBlendMode(bitmap, SDL_BLENDMODE_NONE);
       SDL_BlitSurface(bitmap, nullptr, sheet, &dst);
-      g.uv = {dst.x * inv, dst.y * inv, (dst.x + dst.w) * inv, (dst.y + dst.h) * inv};
+      g.uv = uv(static_cast<float>(dst.x), static_cast<float>(dst.y), static_cast<float>(dst.w), static_cast<float>(dst.h), 0);
       g.w = static_cast<float>(dst.w); g.h = static_cast<float>(dst.h);
       g.valid = true;
     }
@@ -100,10 +144,6 @@ bool BatchRenderer::init(SDL_Renderer* renderer, SDL_Surface* atlas, int cell, i
   SDL_SetTextureBlendMode(texture_, SDL_BLENDMODE_BLEND);
   SDL_SetTextureScaleMode(texture_, SDL_ScaleModeLinear);
 
-  for (std::size_t i = 0; i < unitCircle_.size(); ++i) {
-    const double a = static_cast<double>(i) * 2 * PI / 96.0;
-    unitCircle_[i] = {static_cast<float>(std::cos(a)), static_cast<float>(std::sin(a))};
-  }
   vertices_.reserve(kMaxVertices);
   indices_.reserve(kMaxIndices);
   return true;
@@ -118,6 +158,9 @@ void BatchRenderer::begin() {
   vertices_.clear();
   indices_.clear();
   stats_ = {};
+  resetTransform();
+  additive_ = false;
+  SDL_SetTextureBlendMode(texture_, SDL_BLENDMODE_BLEND);
 }
 
 void BatchRenderer::flush() {
@@ -129,11 +172,19 @@ void BatchRenderer::flush() {
   indices_.clear();
 }
 
+void BatchRenderer::setAdditive(bool additive) {
+  if (additive == additive_) return;
+  flush(); // SDL captures the texture blend mode when the geometry command is queued
+  additive_ = additive;
+  SDL_SetTextureBlendMode(texture_, additive ? SDL_BLENDMODE_ADD : SDL_BLENDMODE_BLEND);
+}
+
 void BatchRenderer::reserve(int vertices, int indices) {
   if (static_cast<int>(vertices_.size()) + vertices > kMaxVertices || static_cast<int>(indices_.size()) + indices > kMaxIndices) flush();
 }
 
-void BatchRenderer::quad(const SDL_FPoint (&p)[4], const UvRect& uv, SDL_Color color) {
+void BatchRenderer::rawQuad(const SDL_FPoint (&p)[4], const UvRect& uv, SDL_Color color) {
+  if (color.a == 0) return;
   reserve(4, 6);
   const int base = static_cast<int>(vertices_.size());
   vertices_.push_back({p[0], color, {uv.u0, uv.v0}});
@@ -144,30 +195,53 @@ void BatchRenderer::quad(const SDL_FPoint (&p)[4], const UvRect& uv, SDL_Color c
   indices_.insert(indices_.end(), idx, idx + 6);
 }
 
-void BatchRenderer::sprite(const native::SpriteCommand& cmd) {
-  if (cmd.sprite >= native::SpriteId::Unknown || cmd.size <= 0) return;
-  UvRect uv = sprites_[static_cast<std::size_t>(cmd.sprite)];
-  if (cmd.flip) std::swap(uv.u0, uv.u1);
-  const float h = cmd.size * 0.5f;
+void BatchRenderer::sprite(native::SpriteId id, float x, float y, float size, float rotation, float alpha, float sx, float sy, float flash, std::uint32_t tint) {
+  if (id >= native::SpriteId::Unknown || size <= 0 || alpha <= 0) return;
+  const float hx = size * 0.5f * sx, hy = size * 0.5f * sy;
   SDL_FPoint p[4];
-  if (cmd.rotation == 0.0f) {
-    p[0] = {cmd.x - h, cmd.y - h}; p[1] = {cmd.x + h, cmd.y - h}; p[2] = {cmd.x + h, cmd.y + h}; p[3] = {cmd.x - h, cmd.y + h};
+  if (rotation == 0.0f) {
+    p[0] = tx(x - hx, y - hy); p[1] = tx(x + hx, y - hy); p[2] = tx(x + hx, y + hy); p[3] = tx(x - hx, y + hy);
   } else {
-    const float c = std::cos(cmd.rotation) * h, s = std::sin(cmd.rotation) * h;
-    p[0] = {cmd.x - c + s, cmd.y - s - c}; p[1] = {cmd.x + c + s, cmd.y + s - c};
-    p[2] = {cmd.x + c - s, cmd.y + s + c}; p[3] = {cmd.x - c - s, cmd.y - s + c};
+    const float c = std::cos(rotation), s = std::sin(rotation);
+    const float cx[4] = {-hx, hx, hx, -hx}, cy[4] = {-hy, -hy, hy, hy};
+    for (int i = 0; i < 4; ++i) p[i] = tx(x + cx[i] * c - cy[i] * s, y + cx[i] * s + cy[i] * c);
   }
-  quad(p, uv, unpack(cmd.rgba));
+  const auto index = static_cast<std::size_t>(id);
+  rawQuad(p, sprites_[index], unpack(tint, alpha));
+  if (flash > 0) rawQuad(p, silhouettes_[index], unpack(0xffffffffu, alpha * std::min(1.0f, flash) * 0.6f));
+}
+
+void BatchRenderer::sprite(const native::SpriteCommand& cmd) {
+  sprite(cmd.sprite, cmd.x, cmd.y, cmd.size, cmd.rotation, 1, cmd.flip ? -1.0f : 1.0f, 1, 0, cmd.rgba);
 }
 
 void BatchRenderer::icon(native::SpriteId id, float x, float y, float size, std::uint32_t color) {
-  sprite({id, x, y, size, 0, color, 0, false});
+  sprite(id, x, y, size, 0, 1, 1, 1, 0, color);
+}
+
+void BatchRenderer::glow(float x, float y, float radius, std::uint32_t color, float alpha) {
+  if (radius <= 0 || alpha <= 0) return;
+  const SDL_FPoint p[4] = {tx(x - radius, y - radius), tx(x + radius, y - radius), tx(x + radius, y + radius), tx(x - radius, y + radius)};
+  rawQuad(p, glow_, unpack(color, alpha));
 }
 
 void BatchRenderer::rect(float x, float y, float w, float h, std::uint32_t color) {
   if (w <= 0 || h <= 0) return;
-  const SDL_FPoint p[4] = {{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}};
-  quad(p, white_, unpack(color));
+  const SDL_FPoint p[4] = {tx(x, y), tx(x + w, y), tx(x + w, y + h), tx(x, y + h)};
+  rawQuad(p, white_, unpack(color));
+}
+
+void BatchRenderer::rectGradient(float x, float y, float w, float h, std::uint32_t tl, std::uint32_t tr, std::uint32_t br, std::uint32_t bl) {
+  if (w <= 0 || h <= 0) return;
+  reserve(4, 6);
+  const int base = static_cast<int>(vertices_.size());
+  const SDL_FPoint uv{white_.u0, white_.v0};
+  vertices_.push_back({tx(x, y), unpack(tl), uv});
+  vertices_.push_back({tx(x + w, y), unpack(tr), uv});
+  vertices_.push_back({tx(x + w, y + h), unpack(br), uv});
+  vertices_.push_back({tx(x, y + h), unpack(bl), uv});
+  const int idx[6] = {base, base + 1, base + 2, base, base + 2, base + 3};
+  indices_.insert(indices_.end(), idx, idx + 6);
 }
 
 void BatchRenderer::frame(float x, float y, float w, float h, float border, std::uint32_t color) {
@@ -179,54 +253,177 @@ void BatchRenderer::frame(float x, float y, float w, float h, float border, std:
 
 void BatchRenderer::line(float x1, float y1, float x2, float y2, float width, std::uint32_t color) {
   const float dx = x2 - x1, dy = y2 - y1, len = std::sqrt(dx * dx + dy * dy);
-  if (len <= 0.01f) return;
+  if (len <= 0.01f || width <= 0) return;
   const float nx = -dy / len * width * 0.5f, ny = dx / len * width * 0.5f;
-  const SDL_FPoint p[4] = {{x1 + nx, y1 + ny}, {x2 + nx, y2 + ny}, {x2 - nx, y2 - ny}, {x1 - nx, y1 - ny}};
-  quad(p, white_, unpack(color));
+  const SDL_FPoint p[4] = {tx(x1 + nx, y1 + ny), tx(x2 + nx, y2 + ny), tx(x2 - nx, y2 - ny), tx(x1 - nx, y1 - ny)};
+  rawQuad(p, white_, unpack(color));
 }
 
-void BatchRenderer::circle(float x, float y, float radius, std::uint32_t color, float thickness) {
-  if (radius <= 0.5f) return;
-  const int segments = radius < 12 ? 12 : radius < 30 ? 16 : radius < 80 ? 24 : radius < 200 ? 32 : 48;
-  const int step = 96 / segments;
-  const SDL_Color c = unpack(color);
+void BatchRenderer::quadGradient(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3,
+                                 std::uint32_t c0, std::uint32_t c1, std::uint32_t c2, std::uint32_t c3) {
+  reserve(4, 6);
+  const int base = static_cast<int>(vertices_.size());
   const SDL_FPoint uv{white_.u0, white_.v0};
-  if (thickness <= 0) {
-    reserve(segments + 1, segments * 3);
+  vertices_.push_back({tx(x0, y0), unpack(c0), uv});
+  vertices_.push_back({tx(x1, y1), unpack(c1), uv});
+  vertices_.push_back({tx(x2, y2), unpack(c2), uv});
+  vertices_.push_back({tx(x3, y3), unpack(c3), uv});
+  const int idx[6] = {base, base + 1, base + 2, base, base + 2, base + 3};
+  indices_.insert(indices_.end(), idx, idx + 6);
+}
+
+void BatchRenderer::lineGradient(float x1, float y1, float x2, float y2, float width, std::uint32_t c1, std::uint32_t c2) {
+  const float dx = x2 - x1, dy = y2 - y1, len = std::sqrt(dx * dx + dy * dy);
+  if (len <= 0.01f || width <= 0) return;
+  const float nx = -dy / len * width * 0.5f, ny = dx / len * width * 0.5f;
+  quadGradient(x1 + nx, y1 + ny, x2 + nx, y2 + ny, x2 - nx, y2 - ny, x1 - nx, y1 - ny, c1, c2, c2, c1);
+}
+
+void BatchRenderer::triangle(float x0, float y0, float x1, float y1, float x2, float y2, std::uint32_t color) {
+  const SDL_Color c = unpack(color);
+  if (c.a == 0) return;
+  reserve(3, 3);
+  const int base = static_cast<int>(vertices_.size());
+  const SDL_FPoint uv{white_.u0, white_.v0};
+  vertices_.push_back({tx(x0, y0), c, uv});
+  vertices_.push_back({tx(x1, y1), c, uv});
+  vertices_.push_back({tx(x2, y2), c, uv});
+  const int idx[3] = {base, base + 1, base + 2};
+  indices_.insert(indices_.end(), idx, idx + 3);
+}
+
+void BatchRenderer::quad(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3, std::uint32_t color) {
+  const SDL_FPoint p[4] = {tx(x0, y0), tx(x1, y1), tx(x2, y2), tx(x3, y3)};
+  rawQuad(p, white_, unpack(color));
+}
+
+void BatchRenderer::ring(float x, float y, float rx, float ry, float a0, float a1, int segments, std::uint32_t color, float thickness, bool closed) {
+  const SDL_Color c = unpack(color);
+  if (c.a == 0 || rx <= 0.1f) return;
+  const SDL_FPoint uv{white_.u0, white_.v0};
+  const float step = (a1 - a0) / static_cast<float>(segments);
+  const int points = closed ? segments : segments + 1;
+  if (thickness <= 0) { // filled disc / ellipse / pie
+    reserve(points + 1, segments * 3);
     const int center = static_cast<int>(vertices_.size());
-    vertices_.push_back({{x, y}, c, uv});
-    for (int i = 0; i < segments; ++i) {
-      const auto& d = unitCircle_[static_cast<std::size_t>(i * step)];
-      vertices_.push_back({{x + d.x * radius, y + d.y * radius}, c, uv});
+    vertices_.push_back({tx(x, y), c, uv});
+    for (int i = 0; i < points; ++i) {
+      const float a = a0 + step * static_cast<float>(i);
+      vertices_.push_back({tx(x + std::cos(a) * rx, y + std::sin(a) * ry), c, uv});
     }
     for (int i = 0; i < segments; ++i) {
-      const int a = center + 1 + i, b = center + 1 + (i + 1) % segments;
-      const int idx[3] = {center, a, b};
+      const int idx[3] = {center, center + 1 + i, center + 1 + (i + 1) % points};
       indices_.insert(indices_.end(), idx, idx + 3);
     }
     return;
   }
-  const float inner = std::max(0.0f, radius - thickness);
-  reserve(segments * 2, segments * 6);
+  const float half = thickness * 0.5f;
+  reserve(points * 2, segments * 6);
   const int base = static_cast<int>(vertices_.size());
-  for (int i = 0; i < segments; ++i) {
-    const auto& d = unitCircle_[static_cast<std::size_t>(i * step)];
-    vertices_.push_back({{x + d.x * radius, y + d.y * radius}, c, uv});
-    vertices_.push_back({{x + d.x * inner, y + d.y * inner}, c, uv});
+  for (int i = 0; i < points; ++i) {
+    const float a = a0 + step * static_cast<float>(i), ca = std::cos(a), sa = std::sin(a);
+    vertices_.push_back({tx(x + ca * (rx + half), y + sa * (ry + half)), c, uv});
+    vertices_.push_back({tx(x + ca * std::max(0.0f, rx - half), y + sa * std::max(0.0f, ry - half)), c, uv});
   }
   for (int i = 0; i < segments; ++i) {
-    const int o0 = base + i * 2, i0 = o0 + 1, o1 = base + ((i + 1) % segments) * 2, i1 = o1 + 1;
+    const int o0 = base + i * 2, i0 = o0 + 1, o1 = base + ((i + 1) % points) * 2, i1 = o1 + 1;
     const int idx[6] = {o0, o1, i1, o0, i1, i0};
     indices_.insert(indices_.end(), idx, idx + 6);
   }
 }
 
-void BatchRenderer::queue(const native::RenderQueue& q) {
-  for (const auto& c : q.circles) if (c.layer < native::kSpriteLayerMin) circle(c.x, c.y, c.radius, c.rgba, c.thickness);
-  for (const auto& s : q.sprites) sprite(s);
-  for (const auto& c : q.circles) if (c.layer >= native::kSpriteLayerMin) circle(c.x, c.y, c.radius, c.rgba, c.thickness);
-  for (const auto& l : q.lines) line(l.x1, l.y1, l.x2, l.y2, l.width, l.rgba);
-  for (const auto& b : q.bars) rect(b.x, b.y, b.w, b.h, b.rgba);
+namespace {
+int segmentsFor(float screenRadius) {
+  return screenRadius < 8 ? 10 : screenRadius < 20 ? 14 : screenRadius < 60 ? 22 : screenRadius < 160 ? 32 : 48;
+}
+} // namespace
+
+void BatchRenderer::circle(float x, float y, float radius, std::uint32_t color, float thickness) {
+  if (radius <= 0.3f) return;
+  ring(x, y, radius, radius, 0, static_cast<float>(2 * PI), segmentsFor(radius * scale_), color, thickness, true);
+}
+
+void BatchRenderer::ellipse(float x, float y, float rx, float ry, std::uint32_t color, float thickness, float rotation) {
+  if (rx <= 0.3f || ry <= 0.3f) return;
+  if (rotation == 0.0f) { ring(x, y, rx, ry, 0, static_cast<float>(2 * PI), segmentsFor(std::max(rx, ry) * scale_), color, thickness, true); return; }
+  // Rotated ellipses are rare (leaves, petals): build them as a path.
+  const int n = 16;
+  const float c = std::cos(rotation), s = std::sin(rotation);
+  beginPath();
+  for (int i = 0; i < n; ++i) {
+    const float a = static_cast<float>(i) * static_cast<float>(2 * PI) / n, ex = std::cos(a) * rx, ey = std::sin(a) * ry;
+    lineTo(x + ex * c - ey * s, y + ex * s + ey * c);
+  }
+  if (thickness > 0) stroke(thickness, color, true); else fill(color);
+}
+
+void BatchRenderer::arc(float x, float y, float rx, float ry, float a0, float a1, std::uint32_t color, float thickness) {
+  const float span = std::abs(a1 - a0);
+  if (span <= 0.001f) return;
+  const int segments = std::max(3, static_cast<int>(segmentsFor(std::max(rx, ry) * scale_) * span / static_cast<float>(2 * PI)) + 1);
+  ring(x, y, rx, ry, a0, a1, segments, color, thickness, false);
+}
+
+void BatchRenderer::dashedCircle(float x, float y, float radius, float dash, float gap, float offset, std::uint32_t color, float thickness) {
+  if (radius <= 1) return;
+  const float period = dash + gap;
+  const float circumference = static_cast<float>(2 * PI) * radius;
+  float start = std::fmod(offset, period);
+  if (start > 0) start -= period;
+  for (float d = start; d < circumference; d += period) {
+    const float from = std::max(0.0f, d), to = std::min(circumference, d + dash);
+    if (to <= from) continue;
+    ring(x, y, radius, radius, from / radius, to / radius, 3, color, thickness, false);
+  }
+}
+
+void BatchRenderer::stroke(float width, std::uint32_t color, bool closed) {
+  const std::size_t n = path_.size();
+  if (n < 2) return;
+  const std::size_t segments = closed ? n : n - 1;
+  for (std::size_t i = 0; i < segments; ++i) {
+    const SDL_FPoint a = path_[i], b = path_[(i + 1) % n];
+    // Square caps (extend by half the width) hide the gaps at polyline joints.
+    const float dx = b.x - a.x, dy = b.y - a.y, len = std::sqrt(dx * dx + dy * dy);
+    if (len < 0.01f) continue;
+    const float ex = dx / len * width * 0.5f, ey = dy / len * width * 0.5f;
+    line(a.x - ex, a.y - ey, b.x + ex, b.y + ey, width, color);
+  }
+}
+
+void BatchRenderer::fill(std::uint32_t color) {
+  const std::size_t n = path_.size();
+  if (n < 3) return;
+  const SDL_Color c = unpack(color);
+  if (c.a == 0) return;
+  float cx = 0, cy = 0;
+  for (const auto& p : path_) { cx += p.x; cy += p.y; }
+  cx /= static_cast<float>(n); cy /= static_cast<float>(n);
+  reserve(static_cast<int>(n) + 1, static_cast<int>(n) * 3);
+  const SDL_FPoint uv{white_.u0, white_.v0};
+  const int center = static_cast<int>(vertices_.size());
+  vertices_.push_back({tx(cx, cy), c, uv});
+  for (const auto& p : path_) vertices_.push_back({tx(p.x, p.y), c, uv});
+  for (std::size_t i = 0; i < n; ++i) {
+    const int idx[3] = {center, center + 1 + static_cast<int>(i), center + 1 + static_cast<int>((i + 1) % n)};
+    indices_.insert(indices_.end(), idx, idx + 3);
+  }
+}
+
+bool BatchRenderer::terrain(int phase, float screenW, float screenH) {
+  if (terrainCount_ == 0) return false;
+  const UvRect& uv = terrain_[static_cast<std::size_t>(std::clamp(phase, 0, terrainCount_ - 1))];
+  const float x0 = (0 - ox_) / scale_, y0 = (0 - oy_) / scale_, x1 = (screenW - ox_) / scale_, y1 = (screenH - oy_) / scale_;
+  const SDL_Color white{255, 255, 255, 255};
+  for (float y = std::floor(y0 / kTerrainTile) * kTerrainTile; y < y1; y += kTerrainTile) {
+    for (float x = std::floor(x0 / kTerrainTile) * kTerrainTile; x < x1; x += kTerrainTile) {
+      // One extra unit of overlap hides rasterizer cracks between tiles at fractional zoom.
+      const float e = kTerrainTile + 1;
+      const SDL_FPoint p[4] = {tx(x, y), tx(x + e, y), tx(x + e, y + e), tx(x, y + e)};
+      rawQuad(p, uv, white);
+    }
+  }
+  return true;
 }
 
 const BatchRenderer::Glyph& BatchRenderer::glyph(std::uint32_t cp) const {
@@ -242,20 +439,29 @@ float BatchRenderer::textWidth(std::string_view s, float px) const {
 }
 
 float BatchRenderer::text(float x, float y, std::string_view s, float px, std::uint32_t color, Align align) {
-  const float scale = px / fontHeight_;
   const float width = textWidth(s, px);
   if (align == Align::Center) x -= width * 0.5f;
   else if (align == Align::Right) x -= width;
   const SDL_Color c = unpack(color);
+  if (c.a == 0) return width;
+  const float scale = px / fontHeight_;
   for (std::size_t i = 0; i < s.size();) {
     const Glyph& g = glyph(decodeUtf8(s, i));
     if (g.w > 0) {
-      const SDL_FPoint p[4] = {{x, y}, {x + g.w * scale, y}, {x + g.w * scale, y + g.h * scale}, {x, y + g.h * scale}};
-      quad(p, g.uv, c);
+      const float w = g.w * scale, h = g.h * scale;
+      const SDL_FPoint p[4] = {tx(x, y), tx(x + w, y), tx(x + w, y + h), tx(x, y + h)};
+      rawQuad(p, g.uv, c);
     }
     x += g.advance * scale;
   }
   return width;
+}
+
+float BatchRenderer::textOutlined(float x, float y, std::string_view s, float px, std::uint32_t color, std::uint32_t outline, Align align) {
+  const float o = std::max(1.0f / scale_, px * 0.07f);
+  static constexpr float offsets[8][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-0.7f, -0.7f}, {0.7f, -0.7f}, {-0.7f, 0.7f}, {0.7f, 0.7f}};
+  for (const auto& d : offsets) text(x + d[0] * o, y + d[1] * o, s, px, outline, align);
+  return text(x, y, s, px, color, align);
 }
 
 float BatchRenderer::textWrapped(float x, float y, float maxWidth, std::string_view s, float px, std::uint32_t color, int maxLines, Align align) {

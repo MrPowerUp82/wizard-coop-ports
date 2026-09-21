@@ -69,10 +69,6 @@ const char* powerTitle(const std::string& id) {
   return it == powerDefs().end() ? id.c_str() : it->second.title.c_str();
 }
 
-std::uint32_t floorColor(int phase) {
-  static constexpr std::uint32_t colors[6] = {rgba(16, 30, 24), rgba(16, 24, 36), rgba(34, 18, 16), rgba(22, 28, 18), rgba(30, 27, 20), rgba(20, 14, 32)};
-  return colors[std::clamp(phase, 0, 5)];
-}
 std::uint32_t accentColor(int phase) {
   static constexpr std::uint32_t colors[6] = {rgba(131, 223, 170), rgba(140, 223, 255), rgba(255, 172, 112), rgba(184, 223, 124), rgba(255, 224, 155), rgba(211, 164, 255)};
   return colors[std::clamp(phase, 0, 5)];
@@ -155,6 +151,11 @@ void Frontend::startRun() {
   choiceIndex_ = 0;
   camera_ = {};
   camera_.zoom = 0; // snap on the first rendered frame
+  anim_.reset();
+  announce_ = {}; toast_ = {};
+  feedbackPrimed_ = false;
+  hurtFlash_ = 0;
+  lastHp_.fill(-1);
   screen_ = Screen::Playing;
 }
 
@@ -175,6 +176,13 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
     case Screen::Playing: updatePlaying(frameSeconds, input); break;
     case Screen::Paused: updatePaused(); break;
     case Screen::Over: updateOver(); break;
+  }
+  if (screen_ != Screen::Title) {
+    // Animation time stops while paused or choosing a power, exactly like the web client.
+    anim_.update(state_, frameSeconds, screen_ == Screen::Paused || (screen_ == Screen::Playing && chooser()));
+    announce_.age += frameSeconds;
+    toast_.age += frameSeconds;
+    hurtFlash_ = std::max(0.0, hurtFlash_ - frameSeconds);
   }
   return true;
 }
@@ -221,6 +229,7 @@ void Frontend::updatePlaying(double frameSeconds, const InputFrame& input) {
   });
   timings_.updateMs = msSince(t0);
   leashPlayers();
+  observeEvents();
 
   if (state_.over) {
     overTime_ += frameSeconds;
@@ -294,6 +303,7 @@ void Frontend::autoplayInput(InputFrame& input) {
     Player* p = playerForSlot(i);
     if (!p) continue;
     pad.connected = true;
+    if (options_.debugCharge && p->specialCooldown <= 0) p->specialCharge = cfg::SPECIAL_MAX;
     const double t = state_.time * 0.6 + slot++ * 1.7;
     double x = std::cos(t) * 0.6, y = std::sin(t) * 0.6;
     for (const auto& e : state_.enemies) {
@@ -318,23 +328,13 @@ void Frontend::render(BatchRenderer& batch, float width, float height) {
   } else {
     renderWorld(batch, width, height);
     renderHud(batch, width, height);
+    renderFeedback(batch, width, height);
     if (screen_ == Screen::Playing && chooser()) renderChooser(batch, width, height);
     if (screen_ == Screen::Paused) renderPause(batch, width, height);
     if (screen_ == Screen::Over) renderOver(batch, width, height);
   }
   if (options_.showPerf) renderPerf(batch, width, height);
   batch.flush();
-}
-
-void Frontend::renderBackground(BatchRenderer& b, float width, float height, const native::Camera& cam) {
-  b.rect(0, 0, width, height, floorColor(state_.phase));
-  // A world-anchored grid gives a sense of motion for the price of ~20 quads.
-  const float spacing = 160.0f * cam.zoom;
-  const float ox = std::fmod(width * 0.5f - cam.x * cam.zoom, spacing);
-  const float oy = std::fmod(height * 0.5f - cam.y * cam.zoom, spacing);
-  const auto grid = withAlpha(accentColor(state_.phase), 18);
-  for (float x = ox < 0 ? ox + spacing : ox; x < width; x += spacing) b.rect(x, 0, 2, height, grid);
-  for (float y = oy < 0 ? oy + spacing : oy; y < height; y += spacing) b.rect(0, y, width, 2, grid);
 }
 
 void Frontend::renderWorld(BatchRenderer& b, float width, float height) {
@@ -353,13 +353,91 @@ void Frontend::renderWorld(BatchRenderer& b, float width, float height) {
   camera_.x += (targetX - camera_.x) * 0.2f;
   camera_.y += (targetY - camera_.y) * 0.2f;
   camera_.zoom += (want - camera_.zoom) * 0.05f;
-  camera_.width = width; camera_.height = height; camera_.viewportX = 0; camera_.viewportY = 0;
 
-  renderBackground(b, width, height, camera_);
   const auto t0 = Clock::now();
-  native::buildRenderQueue(state_, camera_, queue_);
+  drawWorld(b, state_, anim_, WorldView{width, height, camera_.x, camera_.y, camera_.zoom});
   buildMs_ = msSince(t0);
-  b.queue(queue_);
+}
+
+void Frontend::announce(std::string text, std::uint32_t color, bool toast) {
+  Banner& banner = toast ? toast_ : announce_;
+  banner.text = std::move(text);
+  banner.color = color;
+  banner.age = 0;
+  banner.life = toast ? 3.0 : 2.8;
+}
+
+void Frontend::observeEvents() {
+  // Port of src/feedback.js: simulation events become announcements and toasts.
+  static constexpr std::uint32_t danger = rgba(255, 107, 94), gold = rgba(255, 211, 107);
+  if (!feedbackPrimed_) {
+    for (const auto& e : state_.events) feedbackEventId_ = std::max(feedbackEventId_, e.id);
+    feedbackPrimed_ = true;
+  }
+  const auto& def = phases()[static_cast<std::size_t>(std::clamp(state_.phase, 0, 5))];
+  for (const auto& e : state_.events) {
+    if (e.id <= feedbackEventId_) continue;
+    feedbackEventId_ = e.id;
+    const std::string& k = e.kind;
+    if (k == "boss") announce(def.bossName + " despertou!", danger);
+    else if (k == "stage") announce(e.stage == 3 ? "Fúria final do guardião!" : "O guardião entrou em fúria!", danger);
+    else if (k == "bossDown") announce(def.bossName + " caiu!", gold);
+    else if (k == "elite") announce("Uma elite surgiu - derrote-a para ganhar um baú", gold);
+    else if (k == "ring") announce("Enxame! Abra caminho", danger);
+    else if (k == "chest") announce("Baú compartilhado: todos recebem um poder", gold, true);
+    else if (k == "altar") announce("Altar opcional: defenda por 15s para ganhar um poder", gold);
+    else if (k == "altarComplete") announce("Altar purificado! Poder e moedas para todos", gold);
+    else if (k == "altarExpired") announce("O altar se apagou. A campanha continua.", kMuted, true);
+    else if (k == "combo" && e.variant == 1) announce("Combo em equipe! Especiais carregados", gold, true);
+    else if (k == "convergence") announce("Convergência!", gold);
+    else if (k == "encounter" && state_.encounter) {
+      const auto& kind = state_.encounter->kind;
+      announce(kind == "merchant" ? "Um mercador errante chegou - troque moedas por um poder"
+             : kind == "shrine" ? "Um santuário amaldiçoado oferece um pacto" : "Um ladrão fugiu com um baú - alcance-o!", gold);
+    }
+    else if (k == "merchantSale") announce("Negócio fechado: escolha um poder", gold, true);
+    else if (k == "shrineAccepted") announce("Pacto aceito! Poder para todos - inimigos mais fortes neste reino", danger);
+    else if (k == "thiefDown") announce("Ladrão derrubado! O tesouro é seu", gold);
+    else if (k == "thiefEscaped") announce("O ladrão escapou com o tesouro.", kMuted, true);
+    else if (k == "loop") { std::snprintf(scratch_, sizeof scratch_, "Volta %d: os reinos despertam mais fortes", state_.loop + 1); announce(scratch_, danger); }
+    else if (k == "phoenix") announce("Fênix! Um arcanista renasceu", gold);
+  }
+  for (int slot = 0; slot < cfg::MAX_PLAYERS; ++slot) {
+    const Player* p = playerForSlot(slot);
+    if (!p) continue;
+    double& last = lastHp_[static_cast<std::size_t>(slot)];
+    if (last >= 0 && p->alive && p->hp < last - 0.5) { hurtFlash_ = 0.35; anim_.shake(4); }
+    last = p->hp;
+  }
+}
+
+void Frontend::renderFeedback(BatchRenderer& b, float width, float height) {
+  const float s = height / 720.0f;
+  // Low-health pulse and hurt flash: red gradients creeping in from the screen edges.
+  bool low = false;
+  for (const auto& [_, p] : state_.players) if (p.alive && p.hp / std::max(1.0, p.maxHp) < 0.3) low = true;
+  float intensity = static_cast<float>(hurtFlash_ / 0.35) * 0.55f;
+  if (low) intensity = std::max(intensity, 0.25f + 0.15f * static_cast<float>(std::sin(menuTime_ * 5)));
+  if (intensity > 0.01f) {
+    const auto red = rgba(200, 20, 30, static_cast<std::uint8_t>(std::clamp(intensity, 0.0f, 1.0f) * 255)), clear = rgba(200, 20, 30, 0);
+    const float ew = width * 0.16f, eh = height * 0.2f;
+    b.rectGradient(0, 0, width, eh, red, red, clear, clear);
+    b.rectGradient(0, height - eh, width, eh, clear, clear, red, red);
+    b.rectGradient(0, 0, ew, height, red, clear, clear, red);
+    b.rectGradient(width - ew, 0, ew, height, clear, red, red, clear);
+  }
+  auto drawBanner = [&](const Banner& banner, float y, float px) {
+    if (banner.age >= banner.life || banner.text.empty()) return;
+    const float fadeIn = static_cast<float>(std::min(1.0, banner.age / 0.2)), fadeOut = static_cast<float>(std::min(1.0, (banner.life - banner.age) / 0.5));
+    const float alpha = std::min(fadeIn, fadeOut);
+    const float w = b.textWidth(banner.text, px) + 40 * s, h = px * 1.6f;
+    const float drop = (1 - fadeIn) * -10 * s;
+    b.rect(width * 0.5f - w * 0.5f, y + drop, w, h, rgba(8, 10, 20, static_cast<std::uint8_t>(200 * alpha)));
+    b.rect(width * 0.5f - w * 0.5f, y + drop + h - 3 * s, w, 3 * s, withAlpha(banner.color, static_cast<std::uint8_t>(255 * alpha)));
+    b.text(width * 0.5f, y + drop + px * 0.25f, banner.text, px, withAlpha(banner.color, static_cast<std::uint8_t>(255 * alpha)), Align::Center);
+  };
+  drawBanner(announce_, 100 * s, 26 * s);
+  drawBanner(toast_, height - 150 * s, 20 * s);
 }
 
 void Frontend::renderHud(BatchRenderer& b, float width, float height) {
@@ -535,7 +613,7 @@ void Frontend::renderOver(BatchRenderer& b, float width, float height) {
 void Frontend::renderPerf(BatchRenderer& b, float width, float height) {
   const float s = height / 720.0f;
   const auto st = lastBatch_;
-  std::snprintf(scratch_, sizeof scratch_, "%.0f fps  frame %.2fms  sim %.2fms (%d)  queue %.2fms  draw %d/%dv  E%d S%d D%d",
+  std::snprintf(scratch_, sizeof scratch_, "%.0f fps  frame %.2fms  sim %.2fms (%d)  mundo %.2fms  draw %d/%dv  E%d S%d D%d",
                 fps_, timings_.frameMs, timings_.updateMs, timings_.steps, buildMs_, st.drawCalls, st.vertices,
                 static_cast<int>(state_.enemies.size()), static_cast<int>(state_.shots.size()), static_cast<int>(state_.gems.size()));
   const float w = b.textWidth(scratch_, 16 * s) + 16 * s;

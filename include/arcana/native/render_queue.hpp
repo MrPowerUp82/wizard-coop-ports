@@ -13,6 +13,7 @@ enum class SpriteId : std::uint8_t {
   Treant, Lich, Demon, BogWarden, Archon, Umbra,
   Bolt, Fire, Thorn, Blade,
   Gem, GreenGem, Coin, Heart,
+  GemRare, GemEpic,
   Unknown,
   Count
 };
