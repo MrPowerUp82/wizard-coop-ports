@@ -54,7 +54,7 @@ foreach ($target in $Targets) {
       if (Invoke-Container 'pspdev/pspdev' 'tools/docker/psp-build.sh') {
         if (Test-Path dist\psp) { Remove-Item -Recurse -Force dist\psp }
         New-Item -ItemType Directory -Force dist\psp | Out-Null
-        Copy-Item -Recurse build-psp\ArcanaSurvivors dist\psp\r
+        Copy-Item -Recurse build-psp\ArcanaSurvivors dist\psp\
         $results[$target] = 'ok  dist\psp\ArcanaSurvivors\ (copie para ms0:/PSP/GAME/)'
       } else { $results[$target] = 'FALHOU' }
     }
