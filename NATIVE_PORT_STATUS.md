@@ -17,9 +17,15 @@
   - contorno para um bug da SDL2 2.32 no PSP: geometria texturizada não liga `GU_TEXTURE_2D`
     (`BatchRenderer::begin`).
 - No PPSSPP, com o bot e especiais o tempo todo: 60 fps, 91 inimigos, simulação 0,63 ms, mundo 1,35 ms.
-- Build: `build.cmd psp` / `tools/docker/build-all.sh psp` gera `dist/psp/ArcanaSurvivors/`, que vai
-  inteira para `ms0:/PSP/GAME/`. Save em `profile.ini` na mesma pasta. Um `autoplay.txt` na pasta
-  liga o bot com overlay de desempenho (escreva `charged` dentro para especiais contínuos).
+- Build: `build.cmd psp` / `tools/docker/build-all.sh psp` gera em `dist/psp/`:
+  - `arcana-survivors.iso` e `.cso` (imagem de UMD, um arquivo só; vai em `ms0:/ISO/`). O EBOOT.BIN é
+    o PRX sem criptografia, aceito por CFW, Adrenaline e PPSSPP. O CSO é gerado por
+    `tools/psp/make_cso.py`, que confere byte a byte que ele descomprime de volta para a ISO;
+  - `ArcanaSurvivors/` (EBOOT.PBP + assets), a alternativa em pasta para `ms0:/PSP/GAME/`.
+- Save em `ms0:/data/arcana-survivors/profile.ini`, compartilhado pela ISO e pela pasta. O disco é
+  somente leitura, e pastas em `PSP/GAME` ou `PSP/SAVEDATA` sem metadados aparecem como dados
+  corrompidos no XMB. Um `autoplay.txt` nessa pasta liga o bot com overlay de desempenho (escreva
+  `charged` dentro para especiais contínuos).
 - Prévia no PC: `arcana_desktop --psp` (mesma resolução, interface e texturas do PSP).
 - Falta: medir em hardware real (PSP-1000 com 32 MB e PSP-2000+), e validar o som.
 

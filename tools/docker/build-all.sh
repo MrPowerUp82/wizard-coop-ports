@@ -54,9 +54,11 @@ for target in "${TARGETS[@]}"; do
       else RESULT[$target]="FALHOU"; fi
       ;;
     psp)
-      if run pspdev/pspdev tools/docker/psp-build.sh; then
+      docker build -q -t arcana-host -f tools/docker/host.Dockerfile tools/docker >/dev/null
+      if run pspdev/pspdev tools/docker/psp-build.sh && run arcana-host tools/docker/psp-iso.sh; then
         rm -rf dist/psp && mkdir -p dist/psp && cp -r build-psp/ArcanaSurvivors dist/psp/
-        RESULT[$target]="ok  dist/psp/ArcanaSurvivors/ (copie para ms0:/PSP/GAME/)"
+        cp build-psp/arcana-survivors.iso build-psp/arcana-survivors.cso dist/psp/
+        RESULT[$target]="ok  dist/psp/arcana-survivors.iso / .cso + pasta ArcanaSurvivors/"
       else RESULT[$target]="FALHOU"; fi
       ;;
     psp-probe)

@@ -10,6 +10,7 @@
 #include <SDL_ttf.h>
 #include <pspctrl.h>
 #include <psppower.h>
+#include <sys/stat.h>
 
 #include <algorithm>
 #include <cmath>
@@ -60,19 +61,33 @@ int main(int argc, char* argv[]) {
   sceCtrlSetSamplingCycle(0);
   sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
 
-  // Assets and the save live next to the EBOOT (ms0:/PSP/GAME/<folder>/).
+  // Two layouts: an EBOOT folder on the Memory Stick (assets next to EBOOT.PBP) or a UMD image
+  // (ISO/CSO: EBOOT.BIN in PSP_GAME/SYSDIR, assets in PSP_GAME/USRDIR). The disc is read-only, so
+  // the save always goes to ms0:/data/arcana-survivors/, shared by both layouts and hidden from the
+  // XMB (folders under PSP/GAME or PSP/SAVEDATA without their metadata show up as corrupted data).
   std::string dir = argc > 0 && argv[0] ? argv[0] : "";
   dir = dir.substr(0, dir.find_last_of('/') + 1);
+  // Assets next to the executable win (EBOOT folder, or PPSSPP opening a loose EBOOT as umd0:/);
+  // otherwise read them from the disc image.
+  auto exists = [](const std::string& path) {
+    SDL_RWops* f = SDL_RWFromFile(path.c_str(), "rb");
+    if (f) SDL_RWclose(f);
+    return f != nullptr;
+  };
+  const std::string assetsDir = exists(dir + "assets/native_atlas_64.png") ? dir : std::string("disc0:/PSP_GAME/USRDIR/");
+  mkdir("ms0:/data", 0777);
+  mkdir("ms0:/data/arcana-survivors", 0777);
+  const std::string saveDir = "ms0:/data/arcana-survivors/";
 
   if (SDL_Init(SDL_INIT_VIDEO) != 0) return 1;
   TTF_Init();
   IMG_Init(IMG_INIT_PNG);
   SDL_Window* window = SDL_CreateWindow("Arcana Survivors", 0, 0, kWidth, kHeight, SDL_WINDOW_SHOWN);
   SDL_Renderer* renderer = window ? SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC) : nullptr;
-  SDL_Surface* atlas = IMG_Load((dir + "assets/native_atlas_64.png").c_str());
-  SDL_Surface* terrain = IMG_Load((dir + "assets/terrain_tiles_64.png").c_str());
+  SDL_Surface* atlas = IMG_Load((assetsDir + "assets/native_atlas_64.png").c_str());
+  SDL_Surface* terrain = IMG_Load((assetsDir + "assets/terrain_tiles_64.png").c_str());
   // Baked small: at 480x272 text is drawn at 9-20 px, so 18 px glyphs keep the page tiny and sharp.
-  TTF_Font* font = TTF_OpenFont((dir + "assets/fonts/DejaVuSans-Bold.ttf").c_str(), 18);
+  TTF_Font* font = TTF_OpenFont((assetsDir + "assets/fonts/DejaVuSans-Bold.ttf").c_str(), 18);
   BatchRenderer batch;
   std::string error;
   if (!renderer || !atlas || !font || !batch.init(renderer, atlas, atlas->w / 6, 6, terrain, font, error, true)) {
@@ -86,9 +101,9 @@ int main(int argc, char* argv[]) {
 
   FrontendOptions options;
   options.compact = true;
-  // Test hook: an autoplay.txt next to the EBOOT starts a bot run with the performance overlay
+  // Test hook: an autoplay.txt in the save folder starts a bot run with the performance overlay
   // ("charged" inside also keeps specials charged, to stress the effects).
-  if (SDL_RWops* flag = SDL_RWFromFile((dir + "autoplay.txt").c_str(), "rb")) {
+  if (SDL_RWops* flag = SDL_RWFromFile((saveDir + "autoplay.txt").c_str(), "rb")) {
     char text[16] = {};
     SDL_RWread(flag, text, 1, sizeof text - 1);
     SDL_RWclose(flag);
@@ -97,7 +112,7 @@ int main(int argc, char* argv[]) {
     options.debugCharge = std::string(text).find("charged") != std::string::npos;
   }
   auto frontend = std::make_unique<Frontend>(options);
-  frontend->setProfilePath(dir + "profile.ini");
+  frontend->setProfilePath(saveDir + "profile.ini");
   static Audio audio; // synth state lives for the whole process
   if (audio.init(22050)) frontend->setAudio(&audio);
 
