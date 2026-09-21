@@ -1,10 +1,11 @@
-Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch**, **PS Vita** e **PSP**. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
+Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch**, **PS Vita** e **PSP**, com builds para Windows e Linux. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
 
 ## Novidades da v0.6.0
 
 - **PSP:** port completo em ISO/CSO (um arquivo só) ou pasta com EBOOT. A simulação roda em `float`, porque o PSP não tem `double` em hardware; 200 partidas de bot comparadas com a versão `double` dão o mesmo resultado dentro do ruído. Interface refeita para 480×272 (single-player), texturas numa página de 512×512 e áudio sintetizado a 22 kHz. No PPSSPP roda a 60 fps com 90+ inimigos. Ainda não foi medido em hardware real.
 - **Grimório (meta-progressão):** as moedas de cada partida ficam guardadas e compram os 15 upgrades permanentes do jogo web, entre eles Vigor, Potência, Canalização, Fênix, Pacto familiar e os desbloqueios Arsenal, Segundo feitiço e Ritual infinito. Também dá para redistribuir tudo e receber as moedas de volta.
 - **Save por console:** Grimório, personagens escolhidos, ritual, arma inicial, especial e som ficam salvos. Os arquivos ficam em `sdmc:/switch/arcana-survivors/profile.ini` no Switch e em `ux0:data/arcana-survivors/profile.ini` no Vita. A gravação é atômica, então um crash ou uma queda de energia não corrompe o save.
+- **Windows:** build para PC (Windows 10/11 x86_64) em `.zip`, com o mesmo frontend do Linux: extraia e rode `arcana-survivors.exe`. Teclado e controles compatíveis com SDL2, co-op local para até 4 jogadores.
 - **Seleção de personagem:** Azul, Vermelho, Verde ou Roxo para cada jogador, sem repetir no co-op.
 - **Loadout:** com Arsenal, o jogador 1 escolhe a arma inicial; com Segundo feitiço, o especial alternativo.
 
@@ -24,6 +25,7 @@ Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Ninte
 | Nintendo Switch (CFW/Atmosphère) | `arcana-survivors-v{{VERSION}}-switch.nro` | Copie para `sd:/switch/` e abra pelo Homebrew Menu. Use o modo aplicativo (segure R ao abrir um jogo) para ter memória total. |
 | PSP (CFW) ou Vita com Adrenaline | `arcana-survivors-v{{VERSION}}-psp.cso` (ou `.iso`) | Copie para `ms0:/ISO/` (no Vita: `ux0:pspemu/ISO/`). O save fica em `ms0:/data/arcana-survivors/`. Não roda em firmware original. |
 | PS Vita (HENkaku/Ensō) | `arcana-survivors-v{{VERSION}}-vita.vpk` | Instale pelo VitaShell. O Title ID é `ARCA00001`, então ele convive com o port JS antigo (`ARCS00001`). |
+| Windows 10/11 x86_64 | `arcana-survivors-v{{VERSION}}-windows-x86_64.zip` | Extraia a pasta inteira e rode `arcana-survivors.exe` (não precisa instalar nada). O executável não é assinado: se o SmartScreen avisar, clique em "Mais informações" → "Executar assim mesmo". O save fica em `%APPDATA%\MrPowerUp82\ArcanaSurvivors\`. |
 | Linux x86_64 (dev) | `arcana-survivors-v{{VERSION}}-linux-x86_64.tar.gz` | Precisa de `libsdl2`, `libsdl2-image` e `libsdl2-ttf`. Extraia e rode `./arcana_desktop`. |
 
 ## Controles
@@ -42,6 +44,7 @@ Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Ninte
 - Ainda faltam o Códex, o desafio diário, as maldições e o multiplayer online.
 - A orientação do analógico de um Joy-Con sozinho na horizontal ainda não foi validada em todos os firmwares. Se ele girar errado, avise na issue.
 - No PSP, o flash branco de dano virou uma tinta vermelha (falta espaço na textura de 512×512) e o co-op local não existe (o aparelho tem um controle só).
+- O build do Windows foi testado só sob Wine (não em Windows real); se algo falhar (janela, controle, som), avise na issue.
 - O volume segue o do navegador, que é baixo por projeto.
 
 Se o FPS cair, abra o overlay de desempenho numa fase cheia ou num chefe e mande os números (`fps`, `frame`, `sim`, `mundo`, `draw`) numa issue.

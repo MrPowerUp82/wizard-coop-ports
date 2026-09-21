@@ -2,10 +2,10 @@
 # Builds every target in Docker and collects the results in dist/.
 #
 #   tools/docker/build-all.sh                 # host tests + Linux desktop + Switch + Vita
-#   tools/docker/build-all.sh switch vita     # only some targets (host | switch | vita)
+#   tools/docker/build-all.sh switch vita     # only some targets (host | switch | vita | windows | psp | psp-probe)
 #
-# Needs only Docker. Images: arcana-host (built from tools/docker/host.Dockerfile),
-# devkitpro/devkita64 and vitasdk/vitasdk (pulled on first use).
+# Needs only Docker. Images: arcana-host and arcana-windows (built from tools/docker/*.Dockerfile),
+# devkitpro/devkita64, vitasdk/vitasdk and pspdev/pspdev (pulled on first use).
 # Works from Linux, macOS and Git Bash on Windows (tools/docker/build-all.ps1 wraps it for PowerShell).
 set -euo pipefail
 
@@ -53,6 +53,13 @@ for target in "${TARGETS[@]}"; do
         RESULT[$target]="ok  dist/vita/arcana-survivors-native.vpk"
       else RESULT[$target]="FALHOU"; fi
       ;;
+    windows)
+      docker build -q -t arcana-windows -f tools/docker/windows.Dockerfile tools/docker >/dev/null
+      if run arcana-windows tools/docker/windows-build.sh; then
+        rm -rf dist/windows && mkdir -p dist/windows && cp -r build-windows/bundle/. dist/windows/
+        RESULT[$target]="ok  dist/windows/arcana-survivors.exe (+ DLLs do SDL2 e assets/)"
+      else RESULT[$target]="FALHOU"; fi
+      ;;
     psp)
       docker build -q -t arcana-host -f tools/docker/host.Dockerfile tools/docker >/dev/null
       if run pspdev/pspdev tools/docker/psp-build.sh && run arcana-host tools/docker/psp-iso.sh; then
@@ -67,7 +74,7 @@ for target in "${TARGETS[@]}"; do
         RESULT[$target]="ok  dist/psp-probe/EBOOT.PBP"
       else RESULT[$target]="FALHOU"; fi
       ;;
-    *) echo "alvo desconhecido: $target (use host, switch, vita, psp ou psp-probe)"; exit 2 ;;
+    *) echo "alvo desconhecido: $target (use host, switch, vita, windows, psp ou psp-probe)"; exit 2 ;;
   esac
 done
 

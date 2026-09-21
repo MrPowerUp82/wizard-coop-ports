@@ -1,8 +1,8 @@
 # Arcana Survivors — port nativo em C++
 
 Port em C++20 do **Arcana Survivors** (antes *wizard-coop*, um survivors-like cooperativo feito em
-JavaScript) para **Nintendo Switch**, **PS Vita** e **PSP**, com um build de **PC** para
-desenvolvimento. Os ports em JavaScript (nx.js / QuickJS) tinham quedas grandes de FPS; aqui não há
+JavaScript) para **Nintendo Switch**, **PS Vita** e **PSP**, com builds para **Windows** e
+**Linux** (o mesmo frontend, usado também para desenvolvimento). Os ports em JavaScript (nx.js / QuickJS) tinham quedas grandes de FPS; aqui não há
 JavaScript, HTML nem Canvas no jogo: simulação, renderer e áudio são nativos.
 
 **Baixe a versão mais recente em [Releases](https://github.com/MrPowerUp82/wizard-coop-ports/releases/latest).**
@@ -14,6 +14,7 @@ JavaScript, HTML nem Canvas no jogo: simulação, renderer e áudio são nativos
 | Nintendo Switch (CFW/Atmosphère) | `arcana-survivors-v<versão>-switch.nro` | Copie para `sd:/switch/` e abra pelo Homebrew Menu, de preferência em modo aplicativo (segure R ao abrir um jogo). | `sdmc:/switch/arcana-survivors/profile.ini` |
 | PS Vita (HENkaku/Ensō) | `arcana-survivors-v<versão>-vita.vpk` | Instale pelo VitaShell. Title ID `ARCA00001`. | `ux0:data/arcana-survivors/profile.ini` |
 | PSP (CFW) ou Vita com Adrenaline | `arcana-survivors-v<versão>-psp.cso` (ou `.iso`) | Copie para `ms0:/ISO/` (no Vita: `ux0:pspemu/ISO/`). Não roda em firmware original. | `ms0:/data/arcana-survivors/profile.ini` |
+| Windows 10/11 x86_64 | `arcana-survivors-v<versão>-windows-x86_64.zip` | Extraia a pasta inteira e rode `arcana-survivors.exe`; não precisa instalar nada. O executável não é assinado, então o SmartScreen pode avisar: "Mais informações" → "Executar assim mesmo". | `%APPDATA%\MrPowerUp82\ArcanaSurvivors\profile.ini` |
 | Linux x86_64 (dev) | `arcana-survivors-v<versão>-linux-x86_64.tar.gz` | Precisa de `libsdl2`, `libsdl2-image` e `libsdl2-ttf`. Extraia e rode `./arcana_desktop`. | pasta de dados do usuário (o caminho aparece no terminal) |
 
 O save é um arquivo de texto `chave=valor`, gravado de forma atômica (arquivo temporário + rename):
@@ -50,15 +51,17 @@ No menu, esquerda/direita troca o personagem; no co-op, cada jogador entra com A
 
 ## Build
 
-Só é preciso ter o **Docker**: todos os toolchains (devkitPro, VitaSDK, PSPSDK e GCC) rodam em
-containers, nada é instalado no sistema.
+Só é preciso ter o **Docker**: todos os toolchains (devkitPro, VitaSDK, PSPSDK, GCC e MinGW-w64)
+rodam em containers, nada é instalado no sistema. O build do Windows é uma compilação cruzada no
+Linux do container (MinGW-w64 GCC + os pacotes de desenvolvimento oficiais do SDL2 para MinGW); os
+testes rodam no alvo `host`.
 
 **Windows:** dê dois cliques em `build.cmd` ou rode no terminal (sem Git Bash, WSL ou ajuste de
 política de execução):
 
 ```bat
 build.cmd                 :: host, switch, vita
-build.cmd psp             :: só alguns: host | switch | vita | psp | psp-probe
+build.cmd windows psp     :: só alguns: host | switch | vita | windows | psp | psp-probe
 release.cmd               :: todos os alvos + dist\release\v<versão>\ (arquivos, SHA256SUMS, notas)
 ```
 
@@ -75,6 +78,7 @@ tools/release/make-release.sh              # release
 | `host` | `arcana-host` (de `tools/docker/host.Dockerfile`) | testes + `linux/arcana_desktop` |
 | `switch` | `devkitpro/devkita64` | `switch/arcana-survivors.nro` |
 | `vita` | `vitasdk/vitasdk` | `vita/arcana-survivors-native.vpk` |
+| `windows` | `arcana-windows` (de `tools/docker/windows.Dockerfile`) | `windows/arcana-survivors.exe` + DLLs do SDL2 + `assets/` |
 | `psp` | `pspdev/pspdev` + `arcana-host` | `psp/arcana-survivors.iso`, `.cso` e a pasta `ArcanaSurvivors/` (EBOOT) |
 | `psp-probe` | `pspdev/pspdev` | `psp-probe/EBOOT.PBP` (mede a CPU do PSP, sem gráficos) |
 
@@ -92,12 +96,14 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-`ARCANA_BUILD_DESKTOP` precisa de SDL2, SDL2_image e SDL2_ttf. `-DARCANA_REAL_FLOAT=ON` compila a
+`ARCANA_BUILD_DESKTOP` precisa de SDL2, SDL2_image e SDL2_ttf (via pkg-config; no Windows, via
+`find_package` com `CMAKE_PREFIX_PATH` apontando para os pacotes do SDL2, como em `tools/docker/windows-build.sh`). `-DARCANA_REAL_FLOAT=ON` compila a
 simulação em `float`, como no PSP, para testá-la no PC.
 
 ## Ferramentas de desenvolvimento
 
-O `arcana_desktop` tem opções para testar sem controle e sem tela:
+O `arcana_desktop` (no Windows, `arcana-survivors.exe`, que herda o terminal de onde é aberto para
+mostrar a saída) tem opções para testar sem controle e sem tela:
 
 ```bash
 ./arcana_desktop --autoplay 4 --perf                       # 4 bots jogando, overlay de desempenho

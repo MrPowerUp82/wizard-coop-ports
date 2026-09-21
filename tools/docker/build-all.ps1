@@ -2,7 +2,7 @@
 # only Docker Desktop is needed, no Git Bash/WSL.
 #
 #   .\tools\docker\build-all.ps1               # host tests + Linux desktop + Switch + Vita
-#   .\tools\docker\build-all.ps1 switch vita   # only some targets (host | switch | vita)
+#   .\tools\docker\build-all.ps1 switch vita   # only some targets (host | switch | vita | windows | psp | psp-probe)
 #
 # Or double-click build.cmd in the repository root.
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Targets)
@@ -51,6 +51,15 @@ foreach ($target in $Targets) {
         $results[$target] = 'ok  dist\vita\arcana-survivors-native.vpk'
       } else { $results[$target] = 'FALHOU' }
     }
+    'windows' {
+      docker build -q -t arcana-windows -f tools/docker/windows.Dockerfile tools/docker | Out-Null
+      if (Invoke-Container 'arcana-windows' 'tools/docker/windows-build.sh') {
+        if (Test-Path dist\windows) { Remove-Item -Recurse -Force dist\windows }
+        New-Item -ItemType Directory -Force dist\windows | Out-Null
+        Copy-Item -Recurse build-windows\bundle\* dist\windows\
+        $results[$target] = 'ok  dist\windows\arcana-survivors.exe (+ DLLs do SDL2 e assets\)'
+      } else { $results[$target] = 'FALHOU' }
+    }
     'psp' {
       docker build -q -t arcana-host -f tools/docker/host.Dockerfile tools/docker | Out-Null
       if ((Invoke-Container 'pspdev/pspdev' 'tools/docker/psp-build.sh') -and (Invoke-Container 'arcana-host' 'tools/docker/psp-iso.sh')) {
@@ -68,7 +77,7 @@ foreach ($target in $Targets) {
         $results[$target] = 'ok  dist\psp-probe\EBOOT.PBP'
       } else { $results[$target] = 'FALHOU' }
     }
-    default { Write-Host "alvo desconhecido: $target (use host, switch, vita, psp ou psp-probe)" -ForegroundColor Red; exit 2 }
+    default { Write-Host "alvo desconhecido: $target (use host, switch, vita, windows, psp ou psp-probe)" -ForegroundColor Red; exit 2 }
   }
 }
 

@@ -27,7 +27,7 @@ $Commit = (git rev-parse HEAD).Trim()
 $Short = (git rev-parse --short HEAD).Trim()
 $CommitTime = (git log -1 --format=%ct).Trim()
 
-& (Join-Path $Root 'tools\docker\build-all.ps1') host switch vita psp
+& (Join-Path $Root 'tools\docker\build-all.ps1') host switch vita psp windows
 if ($LASTEXITCODE -ne 0) { Write-Host 'Build falhou; release nao gerada.' -ForegroundColor Red; exit 1 }
 
 $Out = "dist\release\v$Version"
@@ -48,6 +48,13 @@ Copy-Item assets\native_atlas_128.png, assets\terrain_tiles.png "$Stage\assets\"
 Copy-Item assets\fonts\* "$Stage\assets\fonts\"
 docker run --rm -v "${Root}:/src" -w /src arcana-host bash -c "chmod +x '$($Stage -replace '\\','/')/arcana_desktop' && tar -C dist/release/stage --owner=0 --group=0 --mtime=@$CommitTime -czf '$($Out -replace '\\','/')/$Name-linux-x86_64.tar.gz' '$Name-linux-x86_64'"
 if ($LASTEXITCODE -ne 0) { throw 'falha ao empacotar o build Linux' }
+
+# Windows bundle (zip), packed inside the windows image with fixed timestamps for reproducibility.
+$WinStage = "dist\release\stage\$Name-windows-x86_64"
+New-Item -ItemType Directory -Force $WinStage | Out-Null
+Copy-Item -Recurse dist\windows\* $WinStage
+docker run --rm -v "${Root}:/src" -w /src/dist/release/stage arcana-windows bash -c "find '$Name-windows-x86_64' -exec touch -d @$CommitTime {} + && find '$Name-windows-x86_64' | LC_ALL=C sort | TZ=UTC zip -X -q -@ '../v$Version/$Name-windows-x86_64.zip'"
+if ($LASTEXITCODE -ne 0) { throw 'falha ao empacotar o build Windows' }
 Remove-Item -Recurse -Force dist\release\stage
 
 # SHA-256 through .NET: Get-FileHash lives in a module that Windows PowerShell 5.1 fails to load
@@ -60,7 +67,7 @@ function Get-Sha256([string]$Path) {
 }
 
 # SHA256SUMS.txt in the coreutils format, so `sha256sum -c` works on Linux/macOS too.
-$files = Get-ChildItem $Out -File | Where-Object { $_.Extension -in '.nro', '.vpk', '.iso', '.cso', '.gz' } | Sort-Object Name
+$files = Get-ChildItem $Out -File | Where-Object { $_.Extension -in '.nro', '.vpk', '.iso', '.cso', '.gz', '.zip' } | Sort-Object Name
 $sums = foreach ($f in $files) { '{0}  {1}' -f (Get-Sha256 $f.FullName), $f.Name }
 [IO.File]::WriteAllText((Join-Path $Root "$Out\SHA256SUMS.txt"), (($sums -join "`n") + "`n"), $Utf8)
 
@@ -78,6 +85,8 @@ $gccVita = Get-FromImage 'vitasdk/vitasdk' 'arm-vita-eabi-gcc -dumpversion'
 $gccPsp = Get-FromImage 'pspdev/pspdev' 'psp-gcc -dumpversion'
 $sdlPsp = Get-FromImage 'pspdev/pspdev' 'grep -E SDL_MAJOR_VERSION\|SDL_MINOR_VERSION\|SDL_PATCHLEVEL $PSPDEV/psp/include/SDL2/SDL_version.h | grep -oE [0-9]+$ | head -n3 | paste -sd.'
 # No double quotes here: Windows PowerShell 5.1 mangles them when calling native programs.
+$gccWin = Get-FromImage 'arcana-windows' 'x86_64-w64-mingw32-g++ -dumpfullversion'
+$sdlWin = Get-FromImage 'arcana-windows' 'grep -E SDL_MAJOR_VERSION\|SDL_MINOR_VERSION\|SDL_PATCHLEVEL /opt/sdl-win64/include/SDL2/SDL_version.h | grep -oE [0-9]+$ | head -n3 | paste -sd.'
 $sdlVita = Get-FromImage 'vitasdk/vitasdk' 'grep -E SDL_MAJOR_VERSION\|SDL_MINOR_VERSION\|SDL_PATCHLEVEL $VITASDK/arm-vita-eabi/include/SDL2/SDL_version.h | grep -oE [0-9]+$ | head -n3 | paste -sd.'
 
 $notes = New-Object System.Collections.Generic.List[string]
@@ -101,6 +110,7 @@ $notes.Add("- Gerado com ``tools/release/make-release.ps1`` (Docker), em $((Get-
 $notes.Add("- Switch: devkitA64 GCC $gccSwitch · $libnx · imagem ``$(Get-Digest 'devkitpro/devkita64')``")
 $notes.Add("- Vita: arm-vita-eabi GCC $gccVita · SDL $sdlVita · imagem ``$(Get-Digest 'vitasdk/vitasdk')``")
 $notes.Add("- PSP: psp-gcc $gccPsp · SDL $sdlPsp · simulacao em float · imagem ``$(Get-Digest 'pspdev/pspdev')``")
+$notes.Add("- Windows: MinGW-w64 GCC $gccWin (compilacao cruzada) · SDL $sdlWin · imagem ``arcana-windows``, ``tools/docker/windows.Dockerfile``")
 $notes.Add("- Linux: GCC $gccHost (imagem ``arcana-host``, ``tools/docker/host.Dockerfile``) · testes passando")
 $NotesPath = Join-Path $Root "$Out\RELEASE_NOTES.md"
 [IO.File]::WriteAllText($NotesPath, (($notes -join "`n") + "`n"), $Utf8)
@@ -112,6 +122,6 @@ Write-Host 'Para publicar (GitHub CLI):'
 Write-Host "  git push origin main"
 Write-Host "  git tag -a v$Version -m `"Arcana Survivors v$Version`""
 Write-Host "  git push origin v$Version"
-Write-Host "  gh release create v$Version $Out\$Name-switch.nro $Out\$Name-vita.vpk $Out\$Name-psp.cso $Out\$Name-psp.iso $Out\$Name-linux-x86_64.tar.gz $Out\SHA256SUMS.txt --title `"Arcana Survivors v$Version`" --notes-file $Out\RELEASE_NOTES.md"
+Write-Host "  gh release create v$Version $Out\$Name-switch.nro $Out\$Name-vita.vpk $Out\$Name-psp.cso $Out\$Name-psp.iso $Out\$Name-linux-x86_64.tar.gz $Out\$Name-windows-x86_64.zip $Out\SHA256SUMS.txt --title `"Arcana Survivors v$Version`" --notes-file $Out\RELEASE_NOTES.md"
 Write-Host ''
-Write-Host "Ou pelo site: crie a release na tag v$Version, cole RELEASE_NOTES.md e anexe os 6 arquivos."
+Write-Host "Ou pelo site: crie a release na tag v$Version, cole RELEASE_NOTES.md e anexe os 7 arquivos."

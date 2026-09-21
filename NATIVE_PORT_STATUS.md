@@ -1,5 +1,22 @@
 # Native Port Status
 
+## Windows (x86_64)
+
+- Mesmo frontend SDL2 do PC/Switch/Vita (`platforms/desktop`), compilado de forma cruzada com
+  MinGW-w64 GCC 14 no container `arcana-windows` (`tools/docker/windows.Dockerfile`, com os pacotes
+  de desenvolvimento oficiais do SDL2, SDL2_image e SDL2_ttf para MinGW).
+- CMake: no Windows o SDL2 vem por `find_package(... CONFIG)` (sem pkg-config); o executável usa o
+  subsistema GUI (sem janela de console) e liga libstdc++, libgcc e winpthread de forma estática,
+  então só as DLLs do SDL2 acompanham o `.exe`. `main.cpp` reanexa o console do processo pai quando o
+  stdout/stderr não estão redirecionados, para `--bench`, `--audio-demo` etc. continuarem úteis.
+- Build: `build.cmd windows` / `tools/docker/build-all.sh windows` gera `dist/windows/` com
+  `arcana-survivors.exe`, `SDL2*.dll` e `assets/`. A release empacota isso num `.zip`
+  reprodutível (`arcana-survivors-v<versão>-windows-x86_64.zip`).
+- Verificação: o `.exe` roda sob Wine (bench e partida do bot com screenshot, headless): carrega
+  atlas, fonte e terreno e renderiza o frame corretamente. **Ainda não foi testado em Windows real**
+  (janela, VSync, controles e áudio). Save em `%APPDATA%\MrPowerUp82\ArcanaSurvivors\profile.ini`.
+- Falta: ícone e metadados de versão no `.exe`, e assinatura de código (o SmartScreen avisa).
+
 ## PSP (branch `psp-port`, em teste)
 
 - **Probe de CPU** (`platforms/psp/probe`): mediu no PPSSPP que o `double` custa ~100× o `float` no

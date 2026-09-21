@@ -17,6 +17,16 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 using namespace arcana;
 using namespace arcana::sdl;
 
@@ -182,9 +192,24 @@ int renderAudioDemo(const std::string& path) {
   return 0;
 }
 
+#ifdef _WIN32
+// The Windows build is a GUI-subsystem program (no console window on double-click). Started from a
+// terminal it has no stdout/stderr, so borrow the parent's console; redirected streams stay as they are.
+void attachParentConsole() {
+  auto missing = [](DWORD id) { HANDLE h = GetStdHandle(id); return h == nullptr || h == INVALID_HANDLE_VALUE; };
+  if (!missing(STD_OUTPUT_HANDLE) && !missing(STD_ERROR_HANDLE)) return;
+  if (!AttachConsole(ATTACH_PARENT_PROCESS)) return;
+  if (missing(STD_OUTPUT_HANDLE)) std::freopen("CONOUT$", "w", stdout);
+  if (missing(STD_ERROR_HANDLE)) std::freopen("CONOUT$", "w", stderr);
+}
+#endif
+
 } // namespace
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+  attachParentConsole();
+#endif
   const Args args = parseArgs(argc, argv);
   if (!args.audioDemo.empty()) return renderAudioDemo(args.audioDemo);
   const bool headless = !args.screenshot.empty() || args.benchSeconds > 0 || args.frames > 0;
