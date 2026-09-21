@@ -25,6 +25,11 @@ constexpr CampaignEntry kCampaigns[] = {
 };
 constexpr int kTitleItems = 4; // campaigns + quit
 
+// src/menu.js characterNames/characterEffects and server/weapons.js SPECIALS.
+constexpr const char* kCharacterNames[4] = {"Azul", "Vermelho", "Verde", "Roxo"};
+constexpr const char* kCharacterEffects[4] = {"Desacelera inimigos", "Explode em área", "Atravessa 3 inimigos", "Lâmina larga, até 2 alvos"};
+constexpr const char* kCharacterSpecials[4] = {"Nova glacial", "Meteoro", "Jardim de espinhos", "Passo lunar"};
+
 struct PowerText { const char* id; const char* desc; };
 constexpr PowerText kPowerText[] = {
   {"arcane", "+25% de dano mágico"}, {"haste", "Ataques 12% mais rápidos"},
@@ -141,7 +146,7 @@ void Frontend::startRun() {
   static constexpr const char* names[4] = {"Arcanista 1", "Arcanista 2", "Arcanista 3", "Arcanista 4"};
   for (int slot = 0; slot < cfg::MAX_PLAYERS; ++slot) {
     if (!joined_[static_cast<std::size_t>(slot)]) continue;
-    Player p = createPlayer(kIds[slot], names[slot], slot);
+    Player p = createPlayer(kIds[slot], names[slot], character_[static_cast<std::size_t>(slot)]);
     p.x = (slot % 2 ? 60 : -60) * (slot > 0 ? 1 : 0);
     p.y = (slot >= 2 ? 60 : 0);
     state_.players[p.id] = std::move(p);
@@ -197,10 +202,36 @@ void Frontend::updateTitle() {
   if (pressed(0, ActUp)) { menuIndex_ = (menuIndex_ + kTitleItems - 1) % kTitleItems; sfx(Sound::Click); }
   if (pressed(0, ActDown)) { menuIndex_ = (menuIndex_ + 1) % kTitleItems; sfx(Sound::Click); }
   for (int slot = 1; slot < cfg::MAX_PLAYERS; ++slot) {
-    if (pressed(slot, ActConfirm) && !joined_[static_cast<std::size_t>(slot)]) { joined_[static_cast<std::size_t>(slot)] = true; sfx(Sound::Signal); }
+    if (pressed(slot, ActConfirm) && !joined_[static_cast<std::size_t>(slot)]) {
+      joined_[static_cast<std::size_t>(slot)] = true;
+      if (characterTaken(slot, character_[static_cast<std::size_t>(slot)])) cycleCharacter(slot, 1, true);
+      sfx(Sound::Signal);
+    }
+    if (joined_[static_cast<std::size_t>(slot)] && pressed(slot, ActLeft)) cycleCharacter(slot, -1);
+    if (joined_[static_cast<std::size_t>(slot)] && pressed(slot, ActRight)) cycleCharacter(slot, 1);
     if (pressed(slot, ActCancel)) joined_[static_cast<std::size_t>(slot)] = false;
   }
+  if (pressed(0, ActLeft)) cycleCharacter(0, -1);
+  if (pressed(0, ActRight)) cycleCharacter(0, 1);
   if (pressed(0, ActConfirm) && menuIndex_ < 3) { sfx(Sound::Click); startRun(); }
+}
+
+bool Frontend::characterTaken(int slot, int character) const {
+  for (int other = 0; other < cfg::MAX_PLAYERS; ++other)
+    if (other != slot && joined_[static_cast<std::size_t>(other)] && character_[static_cast<std::size_t>(other)] == character) return true;
+  return false;
+}
+
+void Frontend::cycleCharacter(int slot, int direction, bool includeCurrent) {
+  // Like the web picker: characters in use by another local player are skipped.
+  int& current = character_[static_cast<std::size_t>(slot)];
+  for (int step = includeCurrent ? 0 : 1; step < 4; ++step) {
+    const int candidate = ((current + direction * step) % 4 + 4) % 4;
+    if (characterTaken(slot, candidate)) continue;
+    if (candidate != current) sfx(Sound::Click);
+    current = candidate;
+    return;
+  }
 }
 
 void Frontend::updatePlaying(double frameSeconds, const InputFrame& input) {
@@ -623,7 +654,7 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
   b.text(width * 0.5f, height * 0.12f, "ARCANA SURVIVORS", 64 * s, kGold, Align::Center);
   b.text(width * 0.5f, height * 0.12f + 72 * s, "Sobreviva às hordas, sozinho ou com até 4 arcanistas", 22 * s, kMuted, Align::Center);
 
-  const float mx = width * 0.5f - 260 * s, my = height * 0.36f;
+  const float mx = width * 0.5f - 260 * s, my = height * 0.29f;
   for (int i = 0; i < kTitleItems; ++i) {
     const bool sel = i == menuIndex_;
     const float y = my + i * 62 * s;
@@ -633,17 +664,33 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
     b.text(mx + 20 * s, y + 12 * s, title, 26 * s, sel ? kText : kMuted);
   }
   if (menuIndex_ < 3) b.text(width * 0.5f, my + kTitleItems * 62 * s + 6 * s, kCampaigns[menuIndex_].detail, 20 * s, kMuted, Align::Center);
+  b.text(width * 0.5f, my + kTitleItems * 62 * s + 34 * s, "Esquerda/Direita: trocar personagem · A: entrar · B: sair", 16 * s, rgba(120, 130, 160), Align::Center);
 
   // Join slots.
-  const float sy = height - 130 * s;
+  const float cw = 236 * s, ch = 176 * s, sy = height - ch - 12 * s;
   for (int slot = 0; slot < cfg::MAX_PLAYERS; ++slot) {
-    const float sx = width * 0.5f + (slot - 1.5f) * 170 * s;
+    const float sx = width * 0.5f + (slot - 1.5f) * (cw + 14 * s);
     const bool in = joined_[static_cast<std::size_t>(slot)];
-    b.rect(sx - 75 * s, sy, 150 * s, 100 * s, in ? rgba(24, 28, 48, 240) : rgba(14, 14, 24, 200));
-    b.frame(sx - 75 * s, sy, 150 * s, 100 * s, 2 * s, in ? playerColor(slot) : rgba(50, 50, 70));
-    b.icon(static_cast<native::SpriteId>(slot), sx, sy + 42 * s, 64 * s, in ? 0xffffffffu : rgba(255, 255, 255, 50));
-    std::snprintf(scratch_, sizeof scratch_, in ? "P%d pronto" : "P%d: aperte A", slot + 1);
-    b.text(sx, sy + 76 * s, scratch_, 16 * s, in ? playerColor(slot) : kMuted, Align::Center);
+    const int c = character_[static_cast<std::size_t>(slot)];
+    const std::uint32_t color = in ? playerColor(c) : rgba(50, 50, 70);
+    b.rect(sx - cw / 2, sy, cw, ch, in ? rgba(24, 28, 48, 240) : rgba(14, 14, 24, 200));
+    b.frame(sx - cw / 2, sy, cw, ch, 2 * s, color);
+    std::snprintf(scratch_, sizeof scratch_, "P%d", slot + 1);
+    b.text(sx - cw / 2 + 10 * s, sy + 6 * s, scratch_, 18 * s, in ? kText : kMuted);
+    if (!in) {
+      b.icon(static_cast<native::SpriteId>(slot), sx, sy + 70 * s, 76 * s, rgba(255, 255, 255, 40));
+      b.text(sx, sy + ch - 44 * s, "Aperte A para entrar", 16 * s, kMuted, Align::Center);
+      continue;
+    }
+    // Portrait bobbing like the web preview, flanked by the switch hints.
+    const float bob = static_cast<float>(std::sin(menuTime_ * 3 + slot)) * 3 * s;
+    b.icon(static_cast<native::SpriteId>(c), sx, sy + 58 * s + bob, 84 * s);
+    b.text(sx - cw / 2 + 14 * s, sy + 44 * s, "<", 26 * s, color);
+    b.text(sx + cw / 2 - 14 * s, sy + 44 * s, ">", 26 * s, color, Align::Right);
+    b.text(sx, sy + 102 * s, kCharacterNames[c], 22 * s, color, Align::Center);
+    b.text(sx, sy + 128 * s, kCharacterEffects[c], 14 * s, rgba(205, 212, 235), Align::Center);
+    std::snprintf(scratch_, sizeof scratch_, "Especial: %s", kCharacterSpecials[c]);
+    b.text(sx, sy + 148 * s, scratch_, 14 * s, kMuted, Align::Center);
   }
 }
 

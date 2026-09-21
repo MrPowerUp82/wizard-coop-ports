@@ -69,6 +69,8 @@ private:
 
   void startRun();
   void updateTitle();
+  bool characterTaken(int slot, int character) const;
+  void cycleCharacter(int slot, int direction, bool includeCurrent = false);
   void updatePlaying(double frameSeconds, const InputFrame& input);
   void updatePaused();
   void updateOver();
@@ -113,6 +115,8 @@ private:
   native::Camera camera_{};
   std::array<PadEdges, cfg::MAX_PLAYERS> edges_{};
   std::array<bool, cfg::MAX_PLAYERS> joined_{true, false, false, false};
+  // Character (spell element / sprite) chosen by each slot; joined slots never share one.
+  std::array<int, cfg::MAX_PLAYERS> character_{0, 1, 2, 3};
   int menuIndex_{0}, pauseIndex_{0}, choiceIndex_{0};
   std::string choiceKey_;
   double menuTime_{}, overTime_{};
