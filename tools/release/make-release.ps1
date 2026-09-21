@@ -1,4 +1,4 @@
-# Builds every target in Docker from the current commit and prepares a GitHub release in
+﻿# Builds every target in Docker from the current commit and prepares a GitHub release in
 # dist\release\v<version>\: versioned artifacts, SHA256SUMS.txt and RELEASE_NOTES.md.
 # Native PowerShell (5.1 or 7); only Docker Desktop and Git are needed.
 #

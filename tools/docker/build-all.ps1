@@ -1,4 +1,4 @@
-# Builds every target in Docker and collects the results in dist\. Native PowerShell (5.1 or 7):
+﻿# Builds every target in Docker and collects the results in dist\. Native PowerShell (5.1 or 7):
 # only Docker Desktop is needed, no Git Bash/WSL.
 #
 #   .\tools\docker\build-all.ps1               # host tests + Linux desktop + Switch + Vita
