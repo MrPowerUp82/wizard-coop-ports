@@ -48,9 +48,18 @@ docker run --rm -v "${Root}:/src" -w /src arcana-host bash -c "chmod +x '$($Stag
 if ($LASTEXITCODE -ne 0) { throw 'falha ao empacotar o build Linux' }
 Remove-Item -Recurse -Force dist\release\stage
 
+# SHA-256 through .NET: Get-FileHash lives in a module that Windows PowerShell 5.1 fails to load
+# when launched from PowerShell 7 (inherited PSModulePath).
+function Get-Sha256([string]$Path) {
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  $stream = [IO.File]::OpenRead($Path)
+  try { return ([BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', '').ToLower() }
+  finally { $stream.Dispose(); $sha.Dispose() }
+}
+
 # SHA256SUMS.txt in the coreutils format, so `sha256sum -c` works on Linux/macOS too.
 $files = Get-ChildItem $Out -File | Where-Object { $_.Extension -in '.nro', '.vpk', '.gz' } | Sort-Object Name
-$sums = foreach ($f in $files) { '{0}  {1}' -f (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower(), $f.Name }
+$sums = foreach ($f in $files) { '{0}  {1}' -f (Get-Sha256 $f.FullName), $f.Name }
 [IO.File]::WriteAllText((Join-Path $Root "$Out\SHA256SUMS.txt"), (($sums -join "`n") + "`n"), $Utf8)
 
 # Toolchain versions, for reproducibility.
@@ -74,7 +83,7 @@ $notes.Add('')
 $notes.Add('| Arquivo | Tamanho | SHA-256 |')
 $notes.Add('|---|---|---|')
 foreach ($f in $files) {
-  $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
+  $hash = Get-Sha256 $f.FullName
   $notes.Add(('| `{0}` | {1} KB | `{2}` |' -f $f.Name, [math]::Ceiling($f.Length / 1024), $hash))
 }
 $notes.Add('')
