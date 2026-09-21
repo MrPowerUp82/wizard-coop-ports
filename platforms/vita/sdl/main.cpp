@@ -91,6 +91,8 @@ int main(int, char**) {
   TTF_CloseFont(font);
 
   auto frontend = std::make_unique<Frontend>();
+  static Audio audio; // synth state lives for the whole process
+  if (audio.init()) frontend->setAudio(&audio);
   InputFrame input;
   std::uint64_t lastUs = sceKernelGetProcessTimeWide();
 
@@ -108,6 +110,7 @@ int main(int, char**) {
     SDL_RenderPresent(renderer);
   }
 
+  audio.shutdown();
   batch.shutdown();
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);

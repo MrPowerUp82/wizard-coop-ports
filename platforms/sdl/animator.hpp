@@ -60,6 +60,9 @@ public:
   // Initial warning of a meteor zone (its falling rock animates over it), 0 if unknown.
   [[nodiscard]] float zoneWarning(std::uint64_t zoneId) const;
   void shake(float amount) { shake_ = std::max(shake_, amount); }
+  // Enemies damaged / killed near a player during the last update (audio.js onHit / onKill hooks).
+  [[nodiscard]] int hits() const { return hits_; }
+  [[nodiscard]] int kills() const { return kills_; }
 
 private:
   struct Actor {
@@ -99,6 +102,7 @@ private:
   struct ZoneWarn { std::uint64_t id{}; float warning{}; };
   native::StaticVector<ZoneWarn, cfg::MAX_ZONES * 2> zoneWarnings_;
   float time_{}, shake_{}, freeze_{};
+  int hits_{}, kills_{};
   float flashAge_{}, flashLife_{}, flashAlpha_{};
   std::uint32_t flashColor_{0xffffffffu};
   std::uint64_t lastEventId_{};

@@ -23,6 +23,7 @@ add_executable(arcana_vita_sdl
   ${ROOT}/platforms/sdl/frontend.cpp
   ${ROOT}/platforms/sdl/animator.cpp
   ${ROOT}/platforms/sdl/world_renderer.cpp
+  ${ROOT}/platforms/sdl/audio.cpp
   ${ROOT}/src/game.cpp
   ${ROOT}/src/data.cpp
   ${ROOT}/src/profile.cpp

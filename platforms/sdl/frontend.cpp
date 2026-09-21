@@ -156,6 +156,9 @@ void Frontend::startRun() {
   feedbackPrimed_ = false;
   hurtFlash_ = 0;
   lastHp_.fill(-1);
+  sampled_ = {};
+  hazardCount_ = 0;
+  overSoundPlayed_ = false;
   screen_ = Screen::Playing;
 }
 
@@ -177,9 +180,12 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
     case Screen::Paused: updatePaused(); break;
     case Screen::Over: updateOver(); break;
   }
+  updateMusic();
   if (screen_ != Screen::Title) {
     // Animation time stops while paused or choosing a power, exactly like the web client.
     anim_.update(state_, frameSeconds, screen_ == Screen::Paused || (screen_ == Screen::Playing && chooser()));
+    if (anim_.hits() > 0) sfx(Sound::Hit);
+    if (anim_.kills() > 0) sfx(Sound::Kill);
     announce_.age += frameSeconds;
     toast_.age += frameSeconds;
     hurtFlash_ = std::max(0.0, hurtFlash_ - frameSeconds);
@@ -188,13 +194,13 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
 }
 
 void Frontend::updateTitle() {
-  if (pressed(0, ActUp)) menuIndex_ = (menuIndex_ + kTitleItems - 1) % kTitleItems;
-  if (pressed(0, ActDown)) menuIndex_ = (menuIndex_ + 1) % kTitleItems;
+  if (pressed(0, ActUp)) { menuIndex_ = (menuIndex_ + kTitleItems - 1) % kTitleItems; sfx(Sound::Click); }
+  if (pressed(0, ActDown)) { menuIndex_ = (menuIndex_ + 1) % kTitleItems; sfx(Sound::Click); }
   for (int slot = 1; slot < cfg::MAX_PLAYERS; ++slot) {
-    if (pressed(slot, ActConfirm)) joined_[static_cast<std::size_t>(slot)] = true;
+    if (pressed(slot, ActConfirm) && !joined_[static_cast<std::size_t>(slot)]) { joined_[static_cast<std::size_t>(slot)] = true; sfx(Sound::Signal); }
     if (pressed(slot, ActCancel)) joined_[static_cast<std::size_t>(slot)] = false;
   }
-  if (pressed(0, ActConfirm) && menuIndex_ < 3) startRun();
+  if (pressed(0, ActConfirm) && menuIndex_ < 3) { sfx(Sound::Click); startRun(); }
 }
 
 void Frontend::updatePlaying(double frameSeconds, const InputFrame& input) {
@@ -262,29 +268,31 @@ void Frontend::updateChooser(Player& p, int slot) {
   for (const auto& id : p.pendingPowers) { key += id; key += ','; }
   if (key != choiceKey_) { choiceKey_ = key; choiceIndex_ = 0; }
   const int count = static_cast<int>(p.pendingPowers.size());
-  if (pressed(slot, ActLeft) || pressed(slot, ActUp)) choiceIndex_ = (choiceIndex_ + count - 1) % count;
-  if (pressed(slot, ActRight) || pressed(slot, ActDown)) choiceIndex_ = (choiceIndex_ + 1) % count;
+  if (pressed(slot, ActLeft) || pressed(slot, ActUp)) { choiceIndex_ = (choiceIndex_ + count - 1) % count; sfx(Sound::Click); }
+  if (pressed(slot, ActRight) || pressed(slot, ActDown)) { choiceIndex_ = (choiceIndex_ + 1) % count; sfx(Sound::Click); }
   if (pressed(slot, ActAlt)) {
     int players = 0;
     for (bool j : joined_) players += j ? 1 : 0;
-    rerollPowers(p, random_, players > 1);
+    if (rerollPowers(p, random_, players > 1)) sfx(Sound::Click);
     return;
   }
   if (pressed(slot, ActConfirm) || (options_.autoplay && menuTime_ > 0)) {
     const std::string id = p.pendingPowers[static_cast<std::size_t>(std::clamp(choiceIndex_, 0, count - 1))];
     applyPower(p, id);
+    sfx(Sound::Power);
     choiceKey_.clear();
   }
 }
 
 void Frontend::updatePaused() {
-  constexpr int items = 3;
-  if (pressed(0, ActUp)) pauseIndex_ = (pauseIndex_ + items - 1) % items;
-  if (pressed(0, ActDown)) pauseIndex_ = (pauseIndex_ + 1) % items;
+  constexpr int items = 4;
+  if (pressed(0, ActUp)) { pauseIndex_ = (pauseIndex_ + items - 1) % items; sfx(Sound::Click); }
+  if (pressed(0, ActDown)) { pauseIndex_ = (pauseIndex_ + 1) % items; sfx(Sound::Click); }
   if (anyPressed(ActPause) || anyPressed(ActCancel)) { screen_ = Screen::Playing; clock_.reset(); return; }
   if (!anyPressed(ActConfirm)) return;
   if (pauseIndex_ == 0) { screen_ = Screen::Playing; clock_.reset(); }
   else if (pauseIndex_ == 1) startRun();
+  else if (pauseIndex_ == 2) { if (audio_) { audio_->setMuted(!audio_->muted()); sfx(Sound::Click); } }
   else screen_ = Screen::Title;
 }
 
@@ -401,6 +409,25 @@ void Frontend::observeEvents() {
     else if (k == "thiefEscaped") announce("O ladrão escapou com o tesouro.", kMuted, true);
     else if (k == "loop") { std::snprintf(scratch_, sizeof scratch_, "Volta %d: os reinos despertam mais fortes", state_.loop + 1); announce(scratch_, danger); }
     else if (k == "phoenix") announce("Fênix! Um arcanista renasceu", gold);
+    playEventSound(e);
+  }
+  // src/feedback.js: hazards, and per-player changes (split-screen players share one sound per frame).
+  if (state_.hazards.size() > hazardCount_) sfx(Sound::Warning);
+  hazardCount_ = state_.hazards.size();
+  for (int slot = 0; slot < cfg::MAX_PLAYERS; ++slot) {
+    const Player* p = playerForSlot(slot);
+    if (!p) continue;
+    Sampled& prev = sampled_[static_cast<std::size_t>(slot)];
+    if (prev.hp >= 0) {
+      if (p->hp < prev.hp - 0.5 && p->alive) sfx(Sound::Hurt);
+      if (p->level > prev.level) sfx(Sound::Level);
+      else if (p->xp > prev.xp) sfx(Sound::Gem);
+      if (p->hp > prev.hp + 10 && p->level == prev.level) sfx(Sound::Heart);
+      if (p->coins > prev.coins) sfx(Sound::Coin);
+      if (p->specialCharge - prev.charge >= 20) sfx(Sound::Crystal);
+      if (p->castCount > prev.cast) sfx(Sound::Shoot);
+    }
+    prev = {p->hp, p->xp, p->specialCharge, p->level, p->coins, p->castCount};
   }
   for (int slot = 0; slot < cfg::MAX_PLAYERS; ++slot) {
     const Player* p = playerForSlot(slot);
@@ -409,6 +436,50 @@ void Frontend::observeEvents() {
     if (last >= 0 && p->alive && p->hp < last - 0.5) { hurtFlash_ = 0.35; anim_.shake(4); }
     last = p->hp;
   }
+}
+
+void Frontend::playEventSound(const Event& e) {
+  // Positional events only sound when a local player is within 800 units (feedback.js `near`).
+  bool near = e.x == 0 && e.y == 0;
+  for (const auto& [_, p] : state_.players) {
+    const double dx = p.x - e.x, dy = p.y - e.y;
+    if (dx * dx + dy * dy < 800.0 * 800.0) near = true;
+  }
+  const std::string& k = e.kind;
+  if (k == "boss") sfx(Sound::Boss);
+  else if (k == "stage" || k == "shrineAccepted") sfx(Sound::Stage);
+  else if (k == "bossDown") sfx(Sound::BossDown);
+  else if (k == "elite" || k == "altar") sfx(Sound::Elite);
+  else if (k == "ring") sfx(Sound::Warning);
+  else if (k == "chest" || k == "altarComplete" || k == "merchantSale" || k == "thiefDown") sfx(Sound::Chest);
+  else if (k == "combo") { if (e.variant == 1) sfx(Sound::TeamCombo); else if (near) sfx(Sound::Chain); }
+  else if (k == "convergence") sfx(Sound::Convergence);
+  else if (k == "encounter") sfx(Sound::Encounter);
+  else if (k == "loop") sfx(Sound::Loop);
+  else if (k == "phoenix") sfx(Sound::Phoenix);
+  else if (!near) return;
+  else if (k == "evade") sfx(Sound::Shoot);
+  else if (k == "magnet") sfx(Sound::Magnet);
+  else if (k == "boom") sfx(Sound::Boom);
+  else if (k == "chain") sfx(Sound::Chain);
+  else if (k == "familiar") sfx(Sound::Familiar);
+  else if (k == "revive") sfx(Sound::Revive);
+  else if (k == "special") sfx(Sound::Special);
+}
+
+void Frontend::updateMusic() {
+  if (!audio_) return;
+  // music.js moodFor(): menu, horde, guardian, fury (third stage), victory, defeat.
+  Mood mood = Mood::Menu;
+  if (screen_ == Screen::Playing || screen_ == Screen::Over) {
+    if (state_.over) mood = state_.victory ? Mood::Victory : Mood::Defeat;
+    else {
+      mood = Mood::Horde;
+      for (const auto& e : state_.enemies) if (e.boss && e.hp > 0) { mood = e.stage == 3 ? Mood::Fury : Mood::Boss; break; }
+    }
+  }
+  audio_->music(mood, screen_ == Screen::Title ? 0 : state_.phase);
+  if (state_.over && !overSoundPlayed_ && screen_ != Screen::Title) { overSoundPlayed_ = true; sfx(state_.victory ? Sound::Victory : Sound::Defeat); }
 }
 
 void Frontend::renderFeedback(BatchRenderer& b, float width, float height) {
@@ -580,8 +651,8 @@ void Frontend::renderPause(BatchRenderer& b, float width, float height) {
   const float s = height / 720.0f;
   b.rect(0, 0, width, height, rgba(0, 0, 0, 160));
   b.text(width * 0.5f, height * 0.25f, "Pausado", 52 * s, kText, Align::Center);
-  static constexpr const char* items[3] = {"Continuar", "Reiniciar ritual", "Menu principal"};
-  for (int i = 0; i < 3; ++i) {
+  const char* items[4] = {"Continuar", "Reiniciar ritual", audio_ && audio_->muted() ? "Som: desligado" : "Som: ligado", "Menu principal"};
+  for (int i = 0; i < 4; ++i) {
     const float y = height * 0.4f + i * 60 * s;
     const bool sel = i == pauseIndex_;
     b.rect(width * 0.5f - 200 * s, y, 400 * s, 50 * s, sel ? rgba(40, 44, 80, 240) : rgba(18, 20, 36, 220));

@@ -28,6 +28,8 @@ struct Args {
   int width{1280}, height{720};
   int frames{-1};         // headless: stop after N frames
   double benchSeconds{};  // headless benchmark with fixed 1/60 frames
+  bool mute{}, forceAudio{};
+  std::string audioDemo;  // render every sound and music mood to a WAV file and exit
   int shotsEvery{};       // headless: also save <screenshot>-NNNN.png every N frames
 };
 
@@ -39,6 +41,9 @@ Args parseArgs(int argc, char** argv) {
     if (k == "--autoplay") { a.frontend.autoplay = true; if (i + 1 < argc && argv[i + 1][0] != '-') a.frontend.autoplayPlayers = std::atoi(argv[++i]); }
     else if (k == "--perf") a.frontend.showPerf = true;
     else if (k == "--charged") a.frontend.debugCharge = true;
+    else if (k == "--mute") a.mute = true;
+    else if (k == "--audio") a.forceAudio = true; // headless too (e.g. SDL_AUDIODRIVER=disk)
+    else if (k == "--audio-demo") a.audioDemo = next("audio-demo.wav");
     else if (k == "--shots-every") a.shotsEvery = std::atoi(next("60").c_str());
     else if (k == "--campaign") a.frontend.campaign = next("quick");
     else if (k == "--play") a.frontend.startImmediately = true;
@@ -131,10 +136,51 @@ void readInput(InputFrame& frame, const std::vector<SDL_GameController*>& pads) 
   }
 }
 
+// Offline render of every sound effect, then 8 s of each music mood, to a 16-bit mono WAV.
+int renderAudioDemo(const std::string& path) {
+  static Audio audio;
+  audio.initOffline();
+  std::vector<float> pcm;
+  auto run = [&](double seconds) {
+    std::vector<float> block(1024);
+    for (int n = static_cast<int>(seconds * Audio::kSampleRate / 1024); n > 0; --n) {
+      audio.render(block.data(), 1024);
+      pcm.insert(pcm.end(), block.begin(), block.end());
+    }
+  };
+  for (int i = 0; i < static_cast<int>(Sound::Count); ++i) {
+    std::printf("%6.2fs %s\n", pcm.size() / static_cast<double>(Audio::kSampleRate), Audio::name(static_cast<Sound>(i)));
+    audio.play(static_cast<Sound>(i));
+    run(i == static_cast<int>(Sound::Victory) || i == static_cast<int>(Sound::BossDown) || i == static_cast<int>(Sound::Boss) ? 1.6 : 0.8);
+  }
+  static constexpr const char* moods[] = {"silent", "menu", "horde", "boss", "fury", "victory", "defeat"};
+  for (int m = 1; m <= 6; ++m) {
+    std::printf("%6.2fs music %s\n", pcm.size() / static_cast<double>(Audio::kSampleRate), moods[m]);
+    audio.music(static_cast<Mood>(m), m % 6);
+    run(8);
+  }
+  float peak = 0; double sum = 0;
+  for (float s : pcm) { peak = std::max(peak, std::abs(s)); sum += static_cast<double>(s) * s; }
+  std::printf("samples=%zu peak=%.3f rms=%.4f\n", pcm.size(), peak, std::sqrt(sum / static_cast<double>(pcm.size())));
+  SDL_RWops* f = SDL_RWFromFile(path.c_str(), "wb");
+  if (!f) return 1;
+  const Uint32 dataBytes = static_cast<Uint32>(pcm.size() * 2);
+  auto u32 = [&](Uint32 v) { SDL_WriteLE32(f, v); };
+  auto u16 = [&](Uint16 v) { SDL_WriteLE16(f, v); };
+  SDL_RWwrite(f, "RIFF", 1, 4); u32(36 + dataBytes); SDL_RWwrite(f, "WAVEfmt ", 1, 8);
+  u32(16); u16(1); u16(1); u32(Audio::kSampleRate); u32(Audio::kSampleRate * 2); u16(2); u16(16);
+  SDL_RWwrite(f, "data", 1, 4); u32(dataBytes);
+  for (float s : pcm) u16(static_cast<Uint16>(static_cast<Sint16>(std::clamp(s, -1.0f, 1.0f) * 32767)));
+  SDL_RWclose(f);
+  std::printf("wrote %s\n", path.c_str());
+  return 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
   const Args args = parseArgs(argc, argv);
+  if (!args.audioDemo.empty()) return renderAudioDemo(args.audioDemo);
   const bool headless = !args.screenshot.empty() || args.benchSeconds > 0 || args.frames > 0;
   if (headless && !SDL_getenv("SDL_VIDEODRIVER")) SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
 
@@ -173,6 +219,8 @@ int main(int argc, char** argv) {
   FrontendOptions options = args.frontend;
   if (args.benchSeconds > 0) { options.autoplay = true; options.showPerf = true; }
   auto frontend = std::make_unique<Frontend>(options); // GameState is large: keep it off the stack
+  static Audio audio;
+  if ((!headless || args.forceAudio) && !args.mute && audio.init()) frontend->setAudio(&audio);
 
   std::vector<SDL_GameController*> pads;
   InputFrame input;
@@ -245,6 +293,7 @@ int main(int argc, char** argv) {
                 static_cast<int>(s.enemies.size()), s.over ? 1 : 0);
   }
   for (auto* c : pads) SDL_GameControllerClose(c);
+  audio.shutdown();
   batch.shutdown();
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);

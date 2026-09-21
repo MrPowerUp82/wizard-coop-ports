@@ -4,6 +4,7 @@
 #include "arcana/native/fixed_step.hpp"
 #include "arcana/native/render_queue.hpp"
 #include "animator.hpp"
+#include "audio.hpp"
 #include "batch_renderer.hpp"
 #include "world_renderer.hpp"
 
@@ -51,6 +52,8 @@ public:
 
   // CPU time of the whole previous frame (update + render build), for the perf overlay.
   void setFrameMs(double ms) { timings_.frameMs = ms; }
+  // Optional: without it the game is silent.
+  void setAudio(Audio* audio) { audio_ = audio; }
   [[nodiscard]] const GameState& state() const { return state_; }
   [[nodiscard]] bool inGame() const { return screen_ == Screen::Playing || screen_ == Screen::Paused; }
   [[nodiscard]] double buildMs() const { return buildMs_; }
@@ -79,6 +82,9 @@ private:
   void renderWorld(BatchRenderer& batch, float width, float height);
   void renderFeedback(BatchRenderer& batch, float width, float height);
   void observeEvents();
+  void updateMusic();
+  void playEventSound(const Event& e);
+  void sfx(Sound sound) { if (audio_) audio_->play(sound); }
   void announce(std::string text, std::uint32_t color, bool toast = false);
   void renderHud(BatchRenderer& batch, float width, float height);
   void renderChooser(BatchRenderer& batch, float width, float height);
@@ -93,6 +99,11 @@ private:
   DefaultRandom random_{};
   native::FixedStep clock_{60.0, 4};
   Animator anim_{};
+  Audio* audio_{};
+  struct Sampled { double hp{-1}, xp{}, charge{}; int level{}, coins{}, cast{}; };
+  std::array<Sampled, cfg::MAX_PLAYERS> sampled_{};
+  std::size_t hazardCount_{};
+  bool overSoundPlayed_{};
   struct Banner { std::string text; std::uint32_t color{}; double age{99}, life{2.8}; };
   Banner announce_, toast_;
   std::uint64_t feedbackEventId_{};

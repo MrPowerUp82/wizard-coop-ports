@@ -155,6 +155,8 @@ int main(int argc, char** argv) {
   appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
 
   auto frontend = std::make_unique<Frontend>(); // GameState is large: keep it off the main thread stack
+  static Audio audio; // synth state lives for the whole process
+  if (audio.init()) frontend->setAudio(&audio);
   InputFrame input;
   using Clock = std::chrono::steady_clock;
   auto last = Clock::now();
@@ -176,6 +178,7 @@ int main(int argc, char** argv) {
     SDL_RenderPresent(renderer);
   }
 
+  audio.shutdown();
   batch.shutdown();
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);

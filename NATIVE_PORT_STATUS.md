@@ -1,5 +1,23 @@
 # Native Port Status
 
+## Stage 4 — áudio e música (2026-09-21)
+
+- `platforms/sdl/audio.*`: port do `src/audio.js` + `src/music.js`. Como no navegador, tudo é
+  sintetizado (nenhum arquivo de áudio). Osciladores seno/triângulo/quadrada/dente de serra (os dois
+  últimos com PolyBLEP contra aliasing), ruído, biquads passa-baixa/passa-alta e rampas exponenciais
+  equivalentes às do WebAudio. Tudo roda no callback da SDL, em PC, Switch e Vita.
+- Os 31 efeitos com os mesmos parâmetros e throttles do JS, e o combo de tom crescente das gemas.
+- Trilha generativa com os mesmos climas (menu, horda, guardião, fúria, vitória, derrota), raízes
+  por reino e progressões. O sequenciamento é preciso por amostra dentro do callback.
+- Gatilhos iguais aos do `feedback.js` e do `main.js`: eventos (com o critério de proximidade),
+  mudanças por jogador (dano, nível, gema, cura, moeda, cristal, disparo), acertos e abates do
+  animator, cliques de menu, escolha de poder, vitória/derrota.
+- A pausa ganhou "Som: ligado/desligado".
+- Custo: 20 s de música de fúria com efeitos pesados renderizam em 0,45% do tempo real no PC. No
+  Vita a estimativa é de 10–15% de um núcleo, na thread de áudio.
+- Testes: `./arcana_desktop --audio-demo demo.wav` grava todos os efeitos e os 6 climas num WAV;
+  `SDL_AUDIODRIVER=disk ./arcana_desktop --autoplay 2 --audio --frames 1800` testa o caminho completo.
+
 ## Stage 3 — efeitos e animações do cliente web (2026-09-21)
 
 - `platforms/sdl/animator.*`: port do `src/animation.js` com pools fixos (192 efeitos, 64 números,

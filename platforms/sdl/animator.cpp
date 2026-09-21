@@ -298,7 +298,7 @@ void Animator::track(const GameState& game, const Player* player, const Enemy* e
   }
   old->seen = stamp_;
   if (!player && enemy->distant) {
-    if (hp < old->hp) { old->hit = 1; addNumber(*old, ex, ey - 26, old->hp - std::max(0.0f, hp)); }
+    if (hp < old->hp) { old->hit = 1; addNumber(*old, ex, ey - 26, old->hp - std::max(0.0f, hp)); ++hits_; }
     old->x = ex; old->y = ey; old->hp = hp; old->alive = alive;
     return;
   }
@@ -327,7 +327,7 @@ void Animator::track(const GameState& game, const Player* player, const Enemy* e
   if (hp < old->hp) {
     old->hit = 1;
     burst(ex, ey, player ? hex(0xffc0bd) : old->color, 4, old->boss ? 65 : 25);
-    if (!player) addNumber(*old, ex, ey - (old->boss ? 70 : 26), old->hp - std::max(0.0f, hp));
+    if (!player) { addNumber(*old, ex, ey - (old->boss ? 70 : 26), old->hp - std::max(0.0f, hp)); ++hits_; }
   }
   if (alive && !old->alive) burst(ex, ey, hex(0x9dffca), 12, 65);
   if (!alive && old->alive) burst(ex, ey, old->color, 8, 40);
@@ -350,6 +350,7 @@ void Animator::track(const GameState& game, const Player* player, const Enemy* e
 }
 
 void Animator::update(const GameState& game, double dtIn, bool paused) {
+  hits_ = kills_ = 0;
   if (paused) return;
   const float dt = static_cast<float>(std::clamp(dtIn, 0.0, 0.05));
   if (freeze_ > 0) { freeze_ -= dt; return; }
@@ -416,6 +417,7 @@ void Animator::update(const GameState& game, double dtIn, bool paused) {
     }
     if (!nearPlayer) continue;
     burst(a.x, a.y, a.color, 5, 30);
+    ++kills_;
     if (Effect* fx = push(FxKind::Ghost, a.x, a.y, 0.24f)) { fx->sprite = a.sprite; fx->size = a.size; }
   }
   actors_.resize(keep);
