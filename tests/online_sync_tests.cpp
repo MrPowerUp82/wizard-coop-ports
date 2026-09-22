@@ -70,6 +70,43 @@ int main() {
   interp.apply(snaps, 1.25, *out);
   assert(out->enemies.size() == 2 && close(out->enemies[1].x, 999));
 
+  // Test familiar interpolation: the two bracketing snapshots have familiars, but the newest does not.
+  // The interpolated result should have a familiar with lerped position.
+  {
+    std::deque<Snapshot> familiarSnaps;
+    auto snap1 = std::make_shared<GameState>();
+    snap1->time = 1.0;
+    Player p1 = createPlayer("u1", "Ana", 0);
+    p1.x = 0;
+    p1.orbitAngle = 3.0;
+    p1.familiar = Familiar{0, 0};
+    snap1->players["u1"] = p1;
+    familiarSnaps.push_back({1.0, 0, snap1});
+
+    auto snap2 = std::make_shared<GameState>();
+    snap2->time = 1.1;
+    Player p2 = createPlayer("u1", "Ana", 0);
+    p2.x = 10;
+    p2.orbitAngle = 3.0;
+    p2.familiar = Familiar{10, 0};
+    snap2->players["u1"] = p2;
+    familiarSnaps.push_back({1.1, 0, snap2});
+
+    auto snap3 = std::make_shared<GameState>();
+    snap3->time = 1.2;
+    Player p3 = createPlayer("u1", "Ana", 0);
+    p3.x = 10;
+    p3.orbitAngle = 3.0;
+    // no familiar
+    snap3->players["u1"] = p3;
+    familiarSnaps.push_back({1.2, 0, snap3});
+
+    auto familiarOut = std::make_unique<GameState>();
+    interp.apply(familiarSnaps, 1.05, *familiarOut);
+    assert(familiarOut->players.at("u1").familiar.has_value());
+    assert(close(familiarOut->players.at("u1").familiar->x, 5));
+  }
+
   std::puts("online_sync: ok");
   return 0;
 }

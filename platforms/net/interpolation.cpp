@@ -37,9 +37,11 @@ void Interpolator::apply(const std::deque<Snapshot>& snaps, double renderT, Game
     p.x = lerp(pa->second.x, pb.x, alpha);
     p.y = lerp(pa->second.y, pb.y, alpha);
     p.orbitAngle = lerpAngle(pa->second.orbitAngle, pb.orbitAngle, alpha);
-    if (pa->second.familiar && pb.familiar && p.familiar) {
-      p.familiar->x = lerp(pa->second.familiar->x, pb.familiar->x, alpha);
-      p.familiar->y = lerp(pa->second.familiar->y, pb.familiar->y, alpha);
+    if (pa->second.familiar && pb.familiar) {
+      Familiar f = *pb.familiar;
+      f.x = lerp(pa->second.familiar->x, pb.familiar->x, alpha);
+      f.y = lerp(pa->second.familiar->y, pb.familiar->y, alpha);
+      p.familiar = f;
     }
   }
   enemies_.clear();
