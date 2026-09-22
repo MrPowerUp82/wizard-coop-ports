@@ -128,8 +128,13 @@ MenuResult OnlineMenu::updateMenu(std::uint32_t pressed, std::uint32_t, const sd
   return MenuResult::Stay;
 }
 
+MenuResult OnlineMenu::leaveMenu() {
+  rooms_.reset(); // openMenu() builds a fresh one on the way back in
+  return MenuResult::Title;
+}
+
 MenuResult OnlineMenu::updateHome(std::uint32_t pressed, Profile& profile) {
-  if (is(pressed, sdl::ActCancel) || is(pressed, sdl::ActPause)) return MenuResult::Title;
+  if (is(pressed, sdl::ActCancel) || is(pressed, sdl::ActPause)) return leaveMenu();
   const int rooms = visibleRooms(), rows = rooms + 4;
   if (is(pressed, sdl::ActUp)) index_ = wrap(index_ - 1, rows);
   if (is(pressed, sdl::ActDown)) index_ = wrap(index_ + 1, rows);
@@ -150,7 +155,7 @@ MenuResult OnlineMenu::updateHome(std::uint32_t pressed, Profile& profile) {
     entry_ = TextEntry(TextKind::Name, profile.prefs.name);
     page_ = Page::Name;
   } else {
-    return MenuResult::Title;
+    return leaveMenu();
   }
   return MenuResult::Stay;
 }
@@ -196,7 +201,7 @@ MenuResult OnlineMenu::updateText(std::uint32_t pressed, const sdl::TextInput& t
       page_ = Page::Home;
       index_ = 0;
     } else if (back) {
-      if (profile.prefs.name.empty()) return MenuResult::Title;
+      if (profile.prefs.name.empty()) return leaveMenu();
       page_ = Page::Home;
     }
   } else if (submit) {

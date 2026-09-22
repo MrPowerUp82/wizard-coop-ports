@@ -56,6 +56,8 @@ private:
   EntryRequest baseEntry(const Profile& profile) const;
   void connect(EntryRequest entry);
   void backHome();
+  // Leaving the online pages: drop a room-list request nobody would poll any more.
+  MenuResult leaveMenu();
   MenuResult updateHome(std::uint32_t pressed, Profile& profile);
   void updateCreate(std::uint32_t pressed, Profile& profile);
   MenuResult updateText(std::uint32_t pressed, const sdl::TextInput& text, Profile& profile);

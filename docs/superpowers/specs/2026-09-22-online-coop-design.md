@@ -106,7 +106,9 @@ Por frame (60 Hz no cliente):
 2. Thread principal: drena a fila; envia input; interpola em `renderT = (now - clockOffset) - 0.1 s`;
    prevê o jogador local; escreve a view em `state_`.
 
-Algoritmos portados do `net.js`, com as mesmas constantes:
+Algoritmos portados do `net.js`, com as mesmas constantes (duas diferenças propositais, comentadas
+no código: o input tem um piso de 50 ms entre envios, para caber no limite do servidor, e a
+extrapolação de tiros para no máximo 0,5 s à frente, para uma reconexão longa não arrastar o mundo):
 - `clockOffset = min(sample, clockOffset + 4 ms)`, com `sample = chegada - state.time`.
 - RTT: ping a cada 2 s, média `rtt*0.7 + amostra*0.3`.
 - Interpolação linear de jogadores, inimigos, gemas e familiar por id; `orbitAngle` por ângulo;
