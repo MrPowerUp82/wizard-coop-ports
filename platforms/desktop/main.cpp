@@ -58,6 +58,8 @@ Args parseArgs(int argc, char** argv) {
     else if (k == "--profile") a.profile = next("");
     else if (k == "--no-save") a.noSave = true;
     else if (k == "--open-shop") a.frontend.openShop = true;
+    else if (k == "--open-credits") a.frontend.openCredits = true;
+    else if (k == "--no-splash") a.frontend.splash = false;
     else if (k == "--psp") { a.psp = true; a.frontend.compact = true; a.width = 480; a.height = 272; }
     else if (k == "--audio-demo") a.audioDemo = next("audio-demo.wav");
     else if (k == "--shots-every") a.shotsEvery = std::atoi(next("60").c_str());

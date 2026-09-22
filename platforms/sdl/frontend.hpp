@@ -41,6 +41,8 @@ struct FrontendOptions {
   bool compact{};      // small single-player screen (PSP 480x272): bigger UI, reflowed layouts
   bool openShop{};     // dev/screenshots: start on the Grimório
   bool debugCharge{};   // autoplay: specials always charged (effects soak test)
+  bool splash{true};    // developer seal before the title (never with autoplay/startImmediately/openShop)
+  bool openCredits{};   // dev/screenshots: start on the credits screen
 };
 
 struct FrameTimings { double updateMs{}, buildMs{}, frameMs{}; int steps{}; };
@@ -63,11 +65,12 @@ public:
   [[nodiscard]] const GameState& state() const { return state_; }
   GameState& stateForTests() { return state_; }
   [[nodiscard]] bool inGame() const { return screen_ == Screen::Playing || screen_ == Screen::Paused; }
+  [[nodiscard]] bool onTitle() const { return screen_ == Screen::Title; }
   [[nodiscard]] double buildMs() const { return buildMs_; }
 
 private:
-  enum class Screen { Title, Playing, Paused, Over, Shop };
-  enum class TitleItem : std::uint8_t { Play, Campaign, Weapon, Special, Shop, Quit };
+  enum class Screen { Splash, Title, Credits, Playing, Paused, Over, Shop };
+  enum class TitleItem : std::uint8_t { Play, Campaign, Weapon, Special, Shop, Credits, Quit };
 
   struct PadEdges { std::uint32_t pressed{}, held{}; };
 
@@ -76,11 +79,12 @@ private:
   bool anyPressed(Action a) const;
 
   void startRun();
+  void updateSplash(double frameSeconds);
   void updateTitle();
   float uiScale(float height) const { return height / 720.0f * (options_.compact ? 1.7f : 1.0f); }
   void updateShop();
   void renderShop(BatchRenderer& batch, float width, float height);
-  native::StaticVector<TitleItem, 6> titleItems() const;
+  native::StaticVector<TitleItem, 7> titleItems() const;
   bool unlocked(const char* id) const;
   void depositRun();
   void saveProfileNow();
@@ -106,7 +110,9 @@ private:
   void announce(std::string text, std::uint32_t color, bool toast = false);
   void renderHud(BatchRenderer& batch, float width, float height);
   void renderChooser(BatchRenderer& batch, float width, float height);
+  void renderSplash(BatchRenderer& batch, float width, float height);
   void renderTitle(BatchRenderer& batch, float width, float height);
+  void renderCredits(BatchRenderer& batch, float width, float height);
   void renderPause(BatchRenderer& batch, float width, float height);
   void renderOver(BatchRenderer& batch, float width, float height);
   void renderPerf(BatchRenderer& batch, float width, float height);
@@ -145,7 +151,7 @@ private:
   bool quitRequested_{};
   int menuIndex_{0}, pauseIndex_{0}, choiceIndex_{0};
   std::string choiceKey_;
-  double menuTime_{}, overTime_{};
+  double menuTime_{}, overTime_{}, splashTime_{};
   double buildMs_{};
   FrameTimings timings_{};
   BatchRenderer::Stats lastBatch_{};

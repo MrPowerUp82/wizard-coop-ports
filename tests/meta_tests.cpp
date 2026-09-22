@@ -20,6 +20,11 @@ void tap(Frontend& f, int slot, std::uint32_t action) {
 }
 int rank(const Profile& p, const char* id) { const auto it = p.upgrades.rank.find(id); return it == p.upgrades.rank.end() ? 0 : it->second; }
 constexpr const char* kPath = "meta_test_profile.ini";
+std::unique_ptr<Frontend> titleScreen() {
+  FrontendOptions options;
+  options.splash = false;
+  return std::make_unique<Frontend>(options);
+}
 } // namespace
 
 int main() {
@@ -41,7 +46,7 @@ int main() {
   // Shop: buy Vigor with the coins in the save, and it persists.
   {
     Profile seed; seed.coins = 200; saveProfileAtomic(seed, kPath);
-    auto f = std::make_unique<Frontend>();
+    auto f = titleScreen();
     f->setProfilePath(kPath);
     tap(*f, 0, ActDown); tap(*f, 0, ActDown); // Play, Ritual, [Grimório]
     tap(*f, 0, ActConfirm);                   // open the shop
@@ -77,7 +82,7 @@ int main() {
 
   // Preferences come back on the next launch.
   {
-    auto f = std::make_unique<Frontend>();
+    auto f = titleScreen();
     f->setProfilePath(kPath);
     tap(*f, 0, ActConfirm); // Play
     assert(f->inGame());

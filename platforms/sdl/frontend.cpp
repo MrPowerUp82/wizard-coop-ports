@@ -116,6 +116,55 @@ void formatClock(char* out, std::size_t n, double seconds) {
   std::snprintf(out, n, "%d:%02d", s / 60, s % 60);
 }
 
+constexpr const char* kDeveloper = "MrPowerUp82";
+constexpr double kSplashSeconds = 2.4;
+
+std::uint8_t alpha8(float a) { return static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255); }
+float ramp(double t, double from, double to) { return static_cast<float>(std::clamp((t - from) / (to - from), 0.0, 1.0)); }
+
+// The MrPowerUp82 seal: rune circle, inscribed triangle, crescent over the axis and a four-point
+// star. Drawn from primitives (no texture), so it stays crisp from the PSP's 480x272 up to 4K.
+// `reveal` 0 -> 1 traces it in; `alpha` fades the whole seal.
+void drawSeal(BatchRenderer& b, float cx, float cy, float r, float reveal, float alpha, double time) {
+  constexpr float kPi = 3.14159265f, kTop = -kPi / 2;
+  const float inner = ramp(reveal, 0.35, 0.8) * alpha, core = ramp(reveal, 0.6, 1.0) * alpha;
+  const std::uint32_t blue = rgba(110, 130, 255, alpha8(0.9f * alpha)), pale = rgba(200, 212, 255, alpha8(inner));
+  const float w = std::max(1.0f, r * 0.03f);
+
+  b.setAdditive(true);
+  b.glow(cx, cy, r * 1.7f, rgba(70, 60, 210), 0.5f * alpha * reveal);
+  b.setAdditive(false);
+
+  // Rings trace themselves from the top, in opposite directions.
+  const float sweep = 2 * kPi * ramp(reveal, 0.0, 0.6);
+  b.arc(cx, cy, r, r, kTop, kTop + sweep, blue, w);
+  b.arc(cx, cy, r * 0.7f, r * 0.7f, kTop - sweep, kTop, blue, w * 0.8f);
+  b.dashedCircle(cx, cy, r * 0.85f, r * 0.07f, r * 0.05f, static_cast<float>(time) * r * 0.08f, rgba(130, 120, 255, alpha8(0.6f * inner)), w * 1.8f);
+
+  b.beginPath();
+  for (int i = 0; i < 3; ++i) b.lineTo(cx + std::cos(kTop + i * 2 * kPi / 3) * r * 0.7f, cy + std::sin(kTop + i * 2 * kPi / 3) * r * 0.7f);
+  b.stroke(w * 0.7f, pale, true);
+  b.line(cx, cy - r * 1.15f, cx, cy + r * 1.15f, w * 0.6f, pale);
+
+  // Crescent cradling a moon above, a sealed orb below.
+  b.arc(cx, cy - r * 0.47f, r * 0.14f, r * 0.14f, kPi * 0.1f, kPi * 0.9f, pale, w * 1.6f);
+  b.circle(cx, cy - r * 0.5f, r * 0.06f, pale, w * 0.8f);
+  b.circle(cx, cy + r * 0.5f, r * 0.12f, pale, w * 0.8f);
+  b.circle(cx, cy + r * 0.5f, r * 0.055f, pale);
+
+  // Four-point star at the heart.
+  b.setAdditive(true);
+  b.glow(cx, cy, r * 0.45f, rgba(150, 170, 255), core);
+  b.setAdditive(false);
+  b.beginPath();
+  for (int i = 0; i < 8; ++i) {
+    const float a = kTop + i * kPi / 4;
+    const float len = i % 2 ? r * 0.05f : (i % 4 == 0 ? r * 0.32f : r * 0.17f);
+    b.lineTo(cx + std::cos(a) * len, cy + std::sin(a) * len);
+  }
+  b.fill(rgba(235, 240, 255, alpha8(core)));
+}
+
 } // namespace
 
 Frontend::Frontend(FrontendOptions options) : options_(std::move(options)) {
@@ -125,6 +174,8 @@ Frontend::Frontend(FrontendOptions options) : options_(std::move(options)) {
   for (int i = 0; i < 3; ++i) if (options_.campaign == kCampaigns[i].id) campaign_ = i;
   if (options_.startImmediately || options_.autoplay) startRun();
   else if (options_.openShop) screen_ = Screen::Shop;
+  else if (options_.openCredits) screen_ = Screen::Credits;
+  else if (options_.splash) screen_ = Screen::Splash;
 }
 
 bool Frontend::anyPressed(Action a) const {
@@ -209,6 +260,10 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
   if (anyPressed(ActDebug)) options_.showPerf = !options_.showPerf;
 
   switch (screen_) {
+    case Screen::Splash: updateSplash(frameSeconds); break;
+    case Screen::Credits:
+      if (pressed(0, ActConfirm) || pressed(0, ActCancel) || pressed(0, ActPause)) { screen_ = Screen::Title; sfx(Sound::Click); }
+      break;
     case Screen::Title:
       updateTitle();
       if (quitRequested_) return false;
@@ -219,7 +274,7 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
     case Screen::Over: updateOver(); break;
   }
   updateMusic();
-  if (screen_ != Screen::Title && screen_ != Screen::Shop) {
+  if (inGame() || screen_ == Screen::Over) {
     // Animation time stops while paused or choosing a power, exactly like the web client.
     anim_.update(state_, frameSeconds, screen_ == Screen::Paused || (screen_ == Screen::Playing && chooser()));
     if (anim_.hits() > 0) sfx(Sound::Hit);
@@ -231,13 +286,14 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
   return true;
 }
 
-native::StaticVector<Frontend::TitleItem, 6> Frontend::titleItems() const {
-  native::StaticVector<TitleItem, 6> items;
+native::StaticVector<Frontend::TitleItem, 7> Frontend::titleItems() const {
+  native::StaticVector<TitleItem, 7> items;
   items.push_back(TitleItem::Play);
   items.push_back(TitleItem::Campaign);
   if (unlocked("arsenal")) items.push_back(TitleItem::Weapon);
   if (unlocked("secondSpell")) items.push_back(TitleItem::Special);
   items.push_back(TitleItem::Shop);
+  items.push_back(TitleItem::Credits);
   items.push_back(TitleItem::Quit);
   return items;
 }
@@ -250,6 +306,13 @@ bool Frontend::unlocked(const char* id) const {
 void Frontend::cycleCampaign() {
   // The endless ritual is sold in the Grimório (server/meta.js `endless` unlock).
   do campaign_ = (campaign_ + 1) % 3; while (campaign_ == 2 && !unlocked("endless"));
+}
+
+void Frontend::updateSplash(double frameSeconds) {
+  splashTime_ += frameSeconds;
+  bool skip = false;
+  for (const auto& e : edges_) skip |= (e.pressed & (ActConfirm | ActCancel | ActPause)) != 0;
+  if (skip || splashTime_ >= kSplashSeconds) screen_ = Screen::Title;
 }
 
 void Frontend::updateTitle() {
@@ -284,6 +347,7 @@ void Frontend::updateTitle() {
     }
     case TitleItem::Special: special_ = 1 - special_; break;
     case TitleItem::Shop: screen_ = Screen::Shop; shopIndex_ = 0; respecArmed_ = false; break;
+    case TitleItem::Credits: screen_ = Screen::Credits; break;
     case TitleItem::Quit: quitRequested_ = true; break;
   }
 }
@@ -503,8 +567,12 @@ void Frontend::autoplayInput(InputFrame& input) {
 void Frontend::render(BatchRenderer& batch, float width, float height) {
   lastBatch_ = batch.stats(); // previous frame: this one is still being built
   batch.begin();
-  if (screen_ == Screen::Title) {
+  if (screen_ == Screen::Splash) {
+    renderSplash(batch, width, height);
+  } else if (screen_ == Screen::Title) {
     renderTitle(batch, width, height);
+  } else if (screen_ == Screen::Credits) {
+    renderCredits(batch, width, height);
   } else if (screen_ == Screen::Shop) {
     renderShop(batch, width, height);
   } else {
@@ -652,8 +720,8 @@ void Frontend::updateMusic() {
       for (const auto& e : state_.enemies) if (e.boss && e.hp > 0) { mood = e.stage == 3 ? Mood::Fury : Mood::Boss; break; }
     }
   }
-  audio_->music(mood, screen_ == Screen::Title ? 0 : state_.phase);
-  if (state_.over && !overSoundPlayed_ && screen_ != Screen::Title) { overSoundPlayed_ = true; sfx(state_.victory ? Sound::Victory : Sound::Defeat); }
+  audio_->music(mood, mood == Mood::Menu ? 0 : state_.phase);
+  if (state_.over && !overSoundPlayed_ && (screen_ == Screen::Playing || screen_ == Screen::Over)) { overSoundPlayed_ = true; sfx(state_.victory ? Sound::Victory : Sound::Defeat); }
 }
 
 void Frontend::renderFeedback(BatchRenderer& b, float width, float height) {
@@ -802,47 +870,62 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
   if (!options_.compact) b.text(width * 0.5f, height * 0.05f + 64 * s, "Sobreviva às hordas, sozinho ou com até 4 arcanistas", 22 * s, kMuted, Align::Center);
 
   const auto items = titleItems();
-  const float mx = options_.compact ? width - 528 * s : width * 0.5f - 260 * s, my = height * (options_.compact ? 0.19f : 0.25f), step = 48 * s;
+  const float mx = options_.compact ? width - 528 * s : width * 0.5f - 260 * s, my = height * (options_.compact ? 0.19f : 0.25f);
+  // Rows tighten when every unlock is shown, so the hints never reach the join slots (or the PSP's edge).
+  const float bottom = height - (options_.compact ? 46 : 222) * s;
+  const float step = std::min(48 * s, (bottom - my) / static_cast<float>(items.size())), rowH = step - 6 * s;
+  const float ty = (rowH - 26 * s) * 0.5f, vy = (rowH - 22 * s) * 0.5f;
   const char* hint = "";
   for (std::size_t i = 0; i < items.size(); ++i) {
     const bool sel = static_cast<int>(i) == menuIndex_;
     const float y = my + static_cast<float>(i) * step;
-    b.rect(mx, y, 520 * s, 42 * s, sel ? rgba(40, 44, 80, 240) : rgba(18, 20, 36, 220));
-    if (sel) b.frame(mx, y, 520 * s, 42 * s, 3 * s, kGold);
+    b.rect(mx, y, 520 * s, rowH, sel ? rgba(40, 44, 80, 240) : rgba(18, 20, 36, 220));
+    if (sel) b.frame(mx, y, 520 * s, rowH, 3 * s, kGold);
     const std::uint32_t color = sel ? kText : kMuted;
     const char* value = nullptr;
     switch (items[i]) {
-      case TitleItem::Play: b.text(mx + 20 * s, y + 8 * s, "Jogar", 24 * s, sel ? kGold : kMuted); if (sel) hint = options_.compact ? "Começa com o arcanista ao lado." : "Começa com os arcanistas prontos abaixo."; break;
+      case TitleItem::Play: b.text(mx + 20 * s, y + ty, "Jogar", 24 * s, sel ? kGold : kMuted); if (sel) hint = options_.compact ? "Começa com o arcanista ao lado." : "Começa com os arcanistas prontos abaixo."; break;
       case TitleItem::Campaign:
-        b.text(mx + 20 * s, y + 8 * s, "Ritual", 24 * s, color);
+        b.text(mx + 20 * s, y + ty, "Ritual", 24 * s, color);
         value = kCampaigns[campaign_].title;
         if (sel) hint = unlocked("endless") ? kCampaigns[campaign_].detail : "O Ritual infinito é desbloqueado no Grimório.";
         break;
       case TitleItem::Weapon:
-        b.text(mx + 20 * s, y + 8 * s, "Arma inicial", 24 * s, color);
+        b.text(mx + 20 * s, y + ty, "Arma inicial", 24 * s, color);
         value = weapon_.empty() ? "Nenhuma (sorteio normal)" : powerTitle(weapon_);
         if (sel) hint = "Arsenal: o Jogador 1 começa com esta arma.";
         break;
       case TitleItem::Special:
-        b.text(mx + 20 * s, y + 8 * s, "Especial", 24 * s, color);
+        b.text(mx + 20 * s, y + ty, "Especial", 24 * s, color);
         value = special_ ? kAltSpecials[character_[0]] : kCharacterSpecials[character_[0]];
         if (sel) hint = "Segundo feitiço: especial alternativo do Jogador 1.";
         break;
       case TitleItem::Shop:
-        b.text(mx + 20 * s, y + 8 * s, "Grimório", 24 * s, color);
+        b.text(mx + 20 * s, y + ty, "Grimório", 24 * s, color);
         std::snprintf(scratch_, sizeof scratch_, "%d moedas", profile_.coins);
-        b.text(mx + 500 * s, y + 10 * s, scratch_, 20 * s, kGold, Align::Right);
+        b.text(mx + 500 * s, y + vy, scratch_, 20 * s, kGold, Align::Right);
         if (sel) hint = "Melhorias permanentes compradas com as moedas das partidas.";
         break;
-      case TitleItem::Quit: b.text(mx + 20 * s, y + 8 * s, "Sair", 24 * s, color); break;
+      case TitleItem::Credits: b.text(mx + 20 * s, y + ty, "Créditos", 24 * s, color); if (sel) hint = "Quem criou o Arcana Survivors."; break;
+      case TitleItem::Quit: b.text(mx + 20 * s, y + ty, "Sair", 24 * s, color); break;
     }
-    if (value) b.text(mx + 500 * s, y + 10 * s, value, 20 * s, sel ? kGold : kMuted, Align::Right);
+    if (value) b.text(mx + 500 * s, y + vy, value, 20 * s, sel ? kGold : kMuted, Align::Right);
   }
   const float below = my + static_cast<float>(items.size()) * step;
   const float hx = options_.compact ? mx + 260 * s : width * 0.5f;
   b.text(hx, below + 4 * s, hint, (options_.compact ? 15 : 18) * s, kMuted, Align::Center);
   b.text(hx, below + 28 * s, options_.compact ? "Esquerda/Direita: personagem · X: escolher" : "Esquerda/Direita: personagem · A: escolher/entrar · B: sair",
          15 * s, rgba(120, 130, 160), Align::Center);
+
+  // Signature: under player 1's slot on the compact screen, top-right corner elsewhere.
+  if (options_.compact) {
+    b.text(10 * s, height - 36 * s, "Desenvolvido por", 13 * s, rgba(120, 130, 160));
+    b.text(10 * s, height - 20 * s, "MrPowerUp82 · 2026", 13 * s, rgba(150, 160, 210));
+  } else {
+    const float tw = b.textWidth("Desenvolvido por MrPowerUp82 · 2026", 15 * s);
+    drawSeal(b, width - tw - 30 * s, 22 * s, 11 * s, 1, 0.8f, menuTime_);
+    b.text(width - 12 * s, 13 * s, "Desenvolvido por MrPowerUp82 · 2026", 15 * s, rgba(150, 160, 210), Align::Right);
+  }
 
   // Join slots (compact: only player 1, left of the menu).
   const float cw = options_.compact ? mx - 20 * s : 236 * s, ch = 164 * s, sy = options_.compact ? my : height - ch - 10 * s;
@@ -870,6 +953,50 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
     std::snprintf(scratch_, sizeof scratch_, "Especial: %s", slot == 0 && special_ ? kAltSpecials[c] : kCharacterSpecials[c]);
     b.text(sx, sy + 140 * s, scratch_, 14 * s, kMuted, Align::Center);
   }
+}
+
+void Frontend::renderSplash(BatchRenderer& b, float width, float height) {
+  const float s = uiScale(height);
+  b.rect(0, 0, width, height, rgba(6, 6, 16));
+  const double t = splashTime_;
+  const float fade = ramp(kSplashSeconds - t, 0.0, 0.45);
+  const float r = std::min(height * 0.3f, width * 0.22f), cx = width * 0.5f, cy = height * 0.44f;
+  drawSeal(b, cx, cy, r, ramp(t, 0.0, 0.9), fade, menuTime_);
+
+  // The name crosses the seal, as on the banner art; never wider than 80% of the screen.
+  const float nameA = ramp(t, 0.45, 0.85) * fade;
+  const float px = std::min(r * 0.42f, width * 0.8f / std::max(1.0f, b.textWidth(kDeveloper, 1)));
+  b.textOutlined(cx, cy - px * 0.55f, kDeveloper, px, rgba(236, 222, 190, alpha8(nameA)), rgba(8, 8, 24, alpha8(nameA)), Align::Center);
+  b.text(cx, cy + r * 1.22f, "apresenta", 22 * s, withAlpha(kMuted, alpha8(ramp(t, 0.9, 1.2) * fade)), Align::Center);
+}
+
+void Frontend::renderCredits(BatchRenderer& b, float width, float height) {
+  const float s = uiScale(height);
+  const bool c = options_.compact;
+  b.rect(0, 0, width, height, rgba(10, 10, 22));
+  const float cx = width * 0.5f, sealR = (c ? 26 : 58) * s;
+  drawSeal(b, cx, (c ? 8 : 22) * s + sealR, sealR, 1, 1, menuTime_);
+  float y = (c ? 70 : 150) * s;
+  b.text(cx, y, "ARCANA SURVIVORS", (c ? 32 : 44) * s, kGold, Align::Center);
+  y += (c ? 40 : 58) * s;
+  b.text(cx, y, "Criado e desenvolvido por", (c ? 15 : 18) * s, kMuted, Align::Center);
+  y += (c ? 18 : 24) * s;
+  b.text(cx, y, kDeveloper, (c ? 26 : 32) * s, rgba(200, 212, 255), Align::Center);
+  y += (c ? 40 : 58) * s;
+  struct Row { const char* label; const char* value; };
+  static constexpr Row rows[] = {
+    {"Programação", "MrPowerUp82"},
+    {"Port nativo C++ / SDL2", "MrPowerUp82"},
+    {"Plataformas", "Nintendo Switch · PS Vita · PSP · Windows · Linux"},
+    {"Fonte", "DejaVu Sans"},
+  };
+  for (const auto& row : rows) {
+    b.text(cx, y, row.label, (c ? 14 : 16) * s, kMuted, Align::Center);
+    b.text(cx, y + (c ? 15 : 19) * s, row.value, (c ? 18 : 21) * s, kText, Align::Center);
+    y += (c ? 40 : 58) * s;
+  }
+  b.text(cx, y + 4 * s, "© 2026 MrPowerUp82 · Licença MIT", (c ? 14 : 16) * s, rgba(120, 130, 160), Align::Center);
+  b.text(cx, height - (c ? 20 : 40) * s, c ? "O: voltar" : "A/B: voltar", 15 * s, rgba(120, 130, 160), Align::Center);
 }
 
 void Frontend::renderShop(BatchRenderer& b, float width, float height) {
