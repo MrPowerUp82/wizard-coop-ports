@@ -1,6 +1,7 @@
 // Tests rely on assert(); keep it active in Release builds.
 #undef NDEBUG
 #include "transport.hpp"
+#include "ws_transport.hpp"
 
 #include <ixwebsocket/IXWebSocket.h>
 #include <mbedtls/version.h>
@@ -8,8 +9,10 @@
 #include <zlib.h>
 
 #include <cassert>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <thread>
 
 using namespace arcana::online;
 
@@ -30,6 +33,20 @@ int main() {
   assert(nlohmann::json::parse(R"({"a":[1,2]})")["a"][1] == 2);
   ix::WebSocket socket;
   socket.setUrl("wss://localhost/ws");
+
+  // A connection nobody answers ends in one Error event, delivered through poll() (no reconnect loop).
+  {
+    WsTransport transport("");
+    transport.open("ws://127.0.0.1:1/");
+    std::vector<TransportEvent> events;
+    for (int i = 0; i < 100 && events.empty(); ++i) {
+      transport.poll(events);
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    assert(events.size() == 1 && events[0].type == TransportEvent::Type::Error && !events[0].tls);
+    transport.close();
+  }
+
   std::puts("online_transport: ok");
   return 0;
 }
