@@ -1,6 +1,7 @@
 // Tests rely on assert(); keep it active in Release builds.
 #undef NDEBUG
 #include "fake_transport.hpp"
+#include "room_list.hpp"
 #include "session.hpp"
 
 #include <nlohmann/json.hpp>
@@ -180,6 +181,33 @@ int main() {
     message(*net.wires[0], R"({"type":"state","state":[]})");
     s.update(1);
     assert(s.droppedSnapshots() == 1);
+  }
+  // Room list: a short connection per refresh, every 5 s; another protocol version hides the rooms.
+  {
+    FakeNet net;
+    RoomList list("wss://example.com/ws", net.factory());
+    list.update(0);
+    assert(net.wires.size() == 1 && !list.loaded());
+    open(*net.wires[0]);
+    list.update(10);
+    assert(json::parse(net.wires[0]->sent[0])["type"] == "listRooms");
+    message(*net.wires[0], R"({"type":"rooms","rooms":[{"code":"XYZ789","count":1,"running":false,"host":"Ana","campaign":"quick","curses":[]}],"capacity":{"used":1,"max":3},"v":1})");
+    list.update(20);
+    assert(list.loaded() && list.rooms().rooms.size() == 1 && list.error().empty() && net.wires[0]->closed);
+    list.update(3000);
+    assert(net.wires.size() == 1);                     // next refresh only 5 s later
+    list.update(5021);
+    assert(net.wires.size() == 2);
+    open(*net.wires[1]);
+    message(*net.wires[1], R"({"type":"rooms","rooms":[{"code":"XYZ789"}],"capacity":{"used":1,"max":3},"v":2})");
+    list.update(5030);
+    assert(list.rooms().rooms.empty() && list.error().find("Atualize") != std::string::npos);
+    list.refresh(5040);
+    list.update(5040);
+    assert(net.wires.size() == 3);
+    error(*net.wires[2]);
+    list.update(5050);
+    assert(list.error() == "Não foi possível alcançar o servidor.");
   }
   std::puts("online_session: ok");
   return 0;
