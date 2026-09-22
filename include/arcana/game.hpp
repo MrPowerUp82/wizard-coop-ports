@@ -89,7 +89,8 @@ struct Drop { std::uint64_t id{}; real x{},y{},value{},ttl{24}; std::string type
 struct Hazard { real x{},y{},radius{},warning{1.3},ttl{1.65},damage{},warn0{1.3}; bool fired{}; };
 struct Rune { std::uint64_t id{}; real x{},y{},radius{},damage{},ttl{},arm{}; std::string owner; int color{}; };
 struct Zone { std::uint64_t id{}; real x{},y{},radius{},ttl{},warning{},damage{},dps{},pull{}; std::string kind, owner; int color{}; bool slow{}, follow{}; };
-struct Event { std::uint64_t id{}; std::string kind; real t{},x{},y{},r{},a{}; int color{},stage{},variant{}; std::string text; native::StaticVector<real, 32> points; };
+struct Event { std::uint64_t id{}; std::string kind; real t{},x{},y{},r{},a{}; int color{},stage{},variant{}; std::string text; native::StaticVector<real, 32> points;
+  std::string player, name; }; // player/name: who sent a signal (filled by the online decoder)
 struct Altar { real x{},y{},radius{120},progress{},ttl{45}; std::string status{"waiting"}; int wave{}; };
 struct Encounter { std::string kind,status{"waiting"}; real x{},y{},radius{},progress{},ttl{}; std::uint64_t enemyId{}; native::StaticVector<std::string, cfg::MAX_PLAYERS> buyers; };
 struct RecentSpecial { std::string id; real t{},x{},y{}; };
@@ -132,6 +133,9 @@ bool rerollPowers(Player& p, Random& random, bool coop);
 bool activateSpecial(GameState& s, const std::string& playerId, Random& random);
 bool activateSpecial(GameState& s, const std::string& playerId);
 bool activateDash(GameState& s, const std::string& playerId, Vec2 input);
+// One step of a player's own movement (walk + dash burst) from p.input, as the server applies it.
+// The online client uses it to predict the local player between snapshots.
+Vec2 playerMovement(const Player& p, real dt);
 bool sendSignal(GameState& s, const std::string& playerId, const std::string& kind, std::optional<Vec2> at={});
 Difficulty difficultyAt(real phaseClock, int playerCount=1, int phase=0, const GameState* s=nullptr);
 

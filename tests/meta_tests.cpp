@@ -83,6 +83,16 @@ int main() {
     assert(f->inGame());
     assert(f->state().players.at("p1").color == 0);
   }
+  // Online preferences survive a save/load round trip.
+  {
+    Profile p;
+    p.prefs.name = "Ana Lú";
+    p.prefs.server = "wss://example.com/ws";
+    assert(saveProfileAtomic(p, kPath));
+    const Profile q = loadProfile(kPath);
+    assert(q.prefs.name == "Ana Lú");
+    assert(q.prefs.server == "wss://example.com/ws");
+  }
   std::remove(kPath);
   return 0;
 }

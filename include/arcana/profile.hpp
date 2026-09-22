@@ -6,7 +6,8 @@
 #include <unordered_set>
 namespace arcana {
 // Menu choices remembered between sessions (the web client keeps them in localStorage).
-struct Preferences { std::array<int,cfg::MAX_PLAYERS> characters{0,1,2,3}; std::string campaign{"quick"}, weapon; int special{}; bool muted{}; };
+struct Preferences { std::array<int,cfg::MAX_PLAYERS> characters{0,1,2,3}; std::string campaign{"quick"}, weapon; int special{}; bool muted{};
+  std::string name, server; }; // online: player name and a server URL overriding the default
 struct DailyRecord { std::string key; int phase{},loop{}; double time{}; bool victory{}; };
 struct Profile {
   int coins{}, invested{}; MetaRanks upgrades;
