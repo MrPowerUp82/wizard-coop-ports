@@ -101,6 +101,7 @@ int main(int argc, char* argv[]) {
 
   FrontendOptions options;
   options.compact = true;
+  options.buttons = {"X", "O", "Quadrado", "X", "O"};
   // Test hook: an autoplay.txt in the save folder starts a bot run with the performance overlay
   // ("charged" inside also keeps specials charged, to stress the effects).
   if (SDL_RWops* flag = SDL_RWFromFile((saveDir + "autoplay.txt").c_str(), "rb")) {

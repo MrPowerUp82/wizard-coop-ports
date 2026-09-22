@@ -264,6 +264,10 @@ int main(int argc, char** argv) {
   }
   static Audio audio;
   if ((!headless || args.forceAudio) && !args.mute && audio.init()) frontend->setAudio(&audio);
+  // Hints name the keys of whatever device player 1 touched last (keyboard until a gamepad is used).
+  static constexpr ButtonLabels kKeyboardButtons{"Enter", "Backspace", "R", "A", "B"}, kPadButtons{};
+  bool keyboardHints = true;
+  frontend->setButtons(kKeyboardButtons);
 
   std::vector<SDL_GameController*> pads;
   InputFrame input;
@@ -278,6 +282,10 @@ int main(int argc, char** argv) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_QUIT) running = false;
+      const bool wasKeyboard = keyboardHints;
+      if (e.type == SDL_KEYDOWN) keyboardHints = true;
+      if (e.type == SDL_CONTROLLERBUTTONDOWN) keyboardHints = false;
+      if (keyboardHints != wasKeyboard) frontend->setButtons(keyboardHints ? kKeyboardButtons : kPadButtons);
       if (e.type == SDL_CONTROLLERDEVICEADDED) if (SDL_GameController* c = SDL_GameControllerOpen(e.cdevice.which)) pads.push_back(c);
       if (e.type == SDL_CONTROLLERDEVICEREMOVED) {
         pads.erase(std::remove_if(pads.begin(), pads.end(), [&](SDL_GameController* c) {

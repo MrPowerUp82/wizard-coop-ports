@@ -32,6 +32,16 @@ struct InputFrame {
   std::array<PadInput, cfg::MAX_PLAYERS> pads{};
 };
 
+// Button names in the on-screen hints. Each platform main sets its own; the desktop switches
+// between keyboard and gamepad names as the player changes device.
+struct ButtonLabels {
+  const char* confirm{"A"};
+  const char* cancel{"B"};
+  const char* alt{"X/Y"};
+  const char* join{"A"};   // how players 2-4 join and leave: gamepad buttons even when P1 is on the keyboard
+  const char* leave{"B"};
+};
+
 struct FrontendOptions {
   bool autoplay{};      // bots drive every joined slot (benchmarks, screenshots, soak tests)
   bool showPerf{};
@@ -43,6 +53,7 @@ struct FrontendOptions {
   bool debugCharge{};   // autoplay: specials always charged (effects soak test)
   bool splash{true};    // developer seal before the title (never with autoplay/startImmediately/openShop)
   bool openCredits{};   // dev/screenshots: start on the credits screen
+  ButtonLabels buttons{};
 };
 
 struct FrameTimings { double updateMs{}, buildMs{}, frameMs{}; int steps{}; };
@@ -61,6 +72,7 @@ public:
   void setAudio(Audio* audio);
   // Where the Grimório (coins, upgrades) and menu choices persist. Without it nothing is saved.
   void setProfilePath(std::string path);
+  void setButtons(const ButtonLabels& buttons) { options_.buttons = buttons; }
   [[nodiscard]] const Profile& profile() const { return profile_; }
   [[nodiscard]] const GameState& state() const { return state_; }
   GameState& stateForTests() { return state_; }

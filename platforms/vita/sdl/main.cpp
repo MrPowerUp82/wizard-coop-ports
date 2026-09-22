@@ -91,7 +91,9 @@ int main(int, char**) {
   if (terrain) SDL_FreeSurface(terrain);
   TTF_CloseFont(font);
 
-  auto frontend = std::make_unique<Frontend>();
+  FrontendOptions options;
+  options.buttons = {"X", "O", "Quadrado", "X", "O"};
+  auto frontend = std::make_unique<Frontend>(options);
   // ux0:data is the conventional homebrew save location; it survives reinstalling the .vpk.
   mkdir("ux0:data/arcana-survivors", 0777);
   frontend->setProfilePath("ux0:data/arcana-survivors/profile.ini");

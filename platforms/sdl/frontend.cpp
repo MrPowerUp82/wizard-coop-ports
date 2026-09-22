@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <new>
 
 namespace arcana::sdl {
@@ -852,7 +853,9 @@ void Frontend::renderChooser(BatchRenderer& b, float width, float height) {
     }
     b.textWrapped(x + 16 * s, y + 98 * s, cardW - 32 * s, powerDescription(id), 19 * s, rgba(205, 212, 235), 5);
   }
-  std::snprintf(scratch_, sizeof scratch_, "Direcional escolhe · A confirmar · X/Y trocar opções (%d)", p->rerolls);
+  const auto& btn = options_.buttons;
+  if (options_.compact) std::snprintf(scratch_, sizeof scratch_, "%s: confirmar · %s: trocar opções (%d)", btn.confirm, btn.alt, p->rerolls);
+  else std::snprintf(scratch_, sizeof scratch_, "Direcional: escolher · %s: confirmar · %s: trocar opções (%d)", btn.confirm, btn.alt, p->rerolls);
   b.text(width * 0.5f, y + cardH + 26 * s, scratch_, 20 * s, kMuted, Align::Center);
 }
 
@@ -914,8 +917,12 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
   const float below = my + static_cast<float>(items.size()) * step;
   const float hx = options_.compact ? mx + 260 * s : width * 0.5f;
   b.text(hx, below + 4 * s, hint, (options_.compact ? 15 : 18) * s, kMuted, Align::Center);
-  b.text(hx, below + 28 * s, options_.compact ? "Esquerda/Direita: personagem · X: escolher" : "Esquerda/Direita: personagem · A: escolher/entrar · B: sair",
-         15 * s, rgba(120, 130, 160), Align::Center);
+  const auto& btn = options_.buttons;
+  if (options_.compact) std::snprintf(scratch_, sizeof scratch_, "Esquerda/Direita: personagem · %s: escolher", btn.confirm);
+  else if (std::strcmp(btn.join, btn.confirm) == 0)
+    std::snprintf(scratch_, sizeof scratch_, "Esquerda/Direita: personagem · %s: escolher/entrar · %s: sair", btn.confirm, btn.leave);
+  else std::snprintf(scratch_, sizeof scratch_, "Esquerda/Direita: personagem · %s: escolher · controles: %s entra, %s sai", btn.confirm, btn.join, btn.leave);
+  b.text(hx, below + 28 * s, scratch_, 15 * s, rgba(120, 130, 160), Align::Center);
 
   // Signature: under player 1's slot on the compact screen, top-right corner elsewhere.
   if (options_.compact) {
@@ -940,7 +947,8 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
     b.text(sx - cw / 2 + 10 * s, sy + 6 * s, scratch_, 18 * s, in ? kText : kMuted);
     if (!in) {
       b.icon(static_cast<native::SpriteId>(slot), sx, sy + 70 * s, 76 * s, rgba(255, 255, 255, 40));
-      b.text(sx, sy + ch - 44 * s, "Aperte A para entrar", 16 * s, kMuted, Align::Center);
+      std::snprintf(scratch_, sizeof scratch_, std::strcmp(btn.join, btn.confirm) == 0 ? "Aperte %s para entrar" : "Aperte %s no controle", btn.join);
+      b.text(sx, sy + ch - 44 * s, scratch_, 16 * s, kMuted, Align::Center);
       continue;
     }
     // Portrait bobbing like the web preview, flanked by the switch hints.
@@ -996,7 +1004,8 @@ void Frontend::renderCredits(BatchRenderer& b, float width, float height) {
     y += (c ? 40 : 58) * s;
   }
   b.text(cx, y + 4 * s, "© 2026 MrPowerUp82 · Licença MIT", (c ? 14 : 16) * s, rgba(120, 130, 160), Align::Center);
-  b.text(cx, height - (c ? 20 : 40) * s, c ? "O: voltar" : "A/B: voltar", 15 * s, rgba(120, 130, 160), Align::Center);
+  std::snprintf(scratch_, sizeof scratch_, "%s: voltar", options_.buttons.cancel);
+  b.text(cx, height - (c ? 20 : 40) * s, scratch_, 15 * s, rgba(120, 130, 160), Align::Center);
 }
 
 void Frontend::renderShop(BatchRenderer& b, float width, float height) {
@@ -1016,7 +1025,7 @@ void Frontend::renderShop(BatchRenderer& b, float width, float height) {
     b.rect(x, y, w, rowH - 3 * s, sel ? rgba(40, 44, 80, 240) : rgba(18, 20, 36, 220));
     if (sel) b.frame(x, y, w, rowH - 3 * s, 2 * s, kGold);
     if (i == kShopRows - 1) {
-      if (respecArmed_) std::snprintf(scratch_, sizeof scratch_, "Aperte A de novo para devolver %d moedas e zerar as melhorias", profile_.invested);
+      if (respecArmed_) std::snprintf(scratch_, sizeof scratch_, "Aperte %s de novo para devolver %d moedas e zerar as melhorias", options_.buttons.confirm, profile_.invested);
       else std::snprintf(scratch_, sizeof scratch_, "Redistribuir melhorias · devolver %d moedas", profile_.invested);
       b.text(width * 0.5f, y + 6 * s, scratch_, 18 * s, profile_.invested > 0 ? (respecArmed_ ? rgba(255, 140, 120) : kText) : kMuted, Align::Center);
       continue;
@@ -1042,9 +1051,11 @@ void Frontend::renderShop(BatchRenderer& b, float width, float height) {
   if (compact) {
     const float by = top + static_cast<float>(visible) * rowH + 4 * s;
     if (shopIndex_ < kShopRows - 1) b.text(width * 0.5f, by, kUpgrades[shopIndex_].desc, 17 * s, kText, Align::Center);
-    b.text(width * 0.5f, by + 24 * s, "X: comprar · O: voltar", 15 * s, rgba(120, 130, 160), Align::Center);
+    std::snprintf(scratch_, sizeof scratch_, "%s: comprar · %s: voltar", options_.buttons.confirm, options_.buttons.cancel);
+    b.text(width * 0.5f, by + 24 * s, scratch_, 15 * s, rgba(120, 130, 160), Align::Center);
   } else {
-    b.text(width * 0.5f, top + kShopRows * rowH + 8 * s, "A: comprar · B: voltar · as melhorias valem para todos os jogadores", 16 * s, rgba(120, 130, 160), Align::Center);
+    std::snprintf(scratch_, sizeof scratch_, "%s: comprar · %s: voltar · as melhorias valem para todos os jogadores", options_.buttons.confirm, options_.buttons.cancel);
+    b.text(width * 0.5f, top + kShopRows * rowH + 8 * s, scratch_, 16 * s, rgba(120, 130, 160), Align::Center);
   }
   renderFeedback(b, width, height);
 }
@@ -1084,7 +1095,8 @@ void Frontend::renderOver(BatchRenderer& b, float width, float height) {
     std::snprintf(scratch_, sizeof scratch_, "+%d moedas guardadas no Grimório · total %d", earned_, profile_.coins);
     b.text(width * 0.5f, height * 0.72f, scratch_, 24 * s, kGold, Align::Center);
   }
-  b.text(width * 0.5f, height * 0.8f, "A jogar de novo · B menu principal", 22 * s, kMuted, Align::Center);
+  std::snprintf(scratch_, sizeof scratch_, "%s: jogar de novo · %s: menu principal", options_.buttons.confirm, options_.buttons.cancel);
+  b.text(width * 0.5f, height * 0.8f, scratch_, 22 * s, kMuted, Align::Center);
 }
 
 void Frontend::renderPerf(BatchRenderer& b, float width, float height) {
