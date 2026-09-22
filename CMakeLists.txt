@@ -9,6 +9,7 @@ option(ARCANA_BUILD_NET "Build native WebSocket client support" ON)
 option(ARCANA_BUILD_TESTS "Build tests" ON)
 option(ARCANA_BUILD_DESKTOP "Build the SDL2 native frontend for PC (same code as the Switch port)" OFF)
 option(ARCANA_REAL_FLOAT "Single-precision simulation (the PSP build; lets the host test it)" OFF)
+option(ARCANA_BUILD_ONLINE "Online co-op client for the PC (IXWebSocket + Mbed TLS, fetched by CMake)" OFF)
 if(ARCANA_REAL_FLOAT)
   add_compile_definitions(ARCANA_REAL_FLOAT)
   if(NOT MSVC)
@@ -21,6 +22,68 @@ if(MSVC)
   target_compile_options(arcana_core PRIVATE /W4 /permissive-)
 else()
   target_compile_options(arcana_core PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+if(ARCANA_BUILD_ONLINE)
+  # Everything is fetched at pinned versions and linked statically: the Windows .exe still ships
+  # only the SDL2 DLLs. IXWebSocket and zlib are compiled from their sources with our own flags.
+  enable_language(C)
+  find_package(Threads REQUIRED)
+  include(FetchContent)
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+  set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
+  set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+  set(GEN_FILES OFF CACHE BOOL "" FORCE)
+  set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "" FORCE)
+  set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "" FORCE)
+  set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "" FORCE)
+  set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON CACHE BOOL "" FORCE)
+  set(JSON_BuildTests OFF CACHE INTERNAL "")
+  FetchContent_Declare(mbedtls
+    URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.4/mbedtls-3.6.4.tar.bz2
+    URL_HASH SHA256=ec35b18a6c593cf98c3e30db8b98ff93e8940a8c4e690e66b41dfc011d678110)
+  FetchContent_Declare(nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+    URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa)
+  FetchContent_Declare(zlib
+    URL https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
+    URL_HASH SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23)
+  FetchContent_Declare(ixwebsocket
+    URL https://github.com/machinezone/IXWebSocket/archive/refs/tags/v11.4.6.tar.gz
+    URL_HASH SHA256=c024334f8e45980836c67008979a884d6dcc5ef067dd2eb1fa7241f4c17ddc32)
+  FetchContent_MakeAvailable(mbedtls nlohmann_json)
+  foreach(dep zlib ixwebsocket) # sources only
+    FetchContent_GetProperties(${dep})
+    if(NOT ${dep}_POPULATED)
+      FetchContent_Populate(${dep})
+    endif()
+  endforeach()
+
+  # zlib: only the deflate/inflate streams permessage-deflate needs (no gz* file API).
+  add_library(arcana_zlib STATIC
+    ${zlib_SOURCE_DIR}/adler32.c ${zlib_SOURCE_DIR}/compress.c ${zlib_SOURCE_DIR}/crc32.c ${zlib_SOURCE_DIR}/deflate.c
+    ${zlib_SOURCE_DIR}/infback.c ${zlib_SOURCE_DIR}/inffast.c ${zlib_SOURCE_DIR}/inflate.c ${zlib_SOURCE_DIR}/inftrees.c
+    ${zlib_SOURCE_DIR}/trees.c ${zlib_SOURCE_DIR}/uncompr.c ${zlib_SOURCE_DIR}/zutil.c)
+  target_include_directories(arcana_zlib PUBLIC ${zlib_SOURCE_DIR})
+
+  # IXWebSocket: every source is guarded by its IXWEBSOCKET_USE_* macro, so globbing them is safe.
+  file(GLOB ARCANA_IX_SOURCES ${ixwebsocket_SOURCE_DIR}/ixwebsocket/*.cpp)
+  add_library(arcana_ixwebsocket STATIC ${ARCANA_IX_SOURCES})
+  target_include_directories(arcana_ixwebsocket PUBLIC ${ixwebsocket_SOURCE_DIR})
+  # Mbed TLS >= 3.x requires the RNG-taking overloads (mbedtls_pk_parse_keyfile, ...); IXWebSocket
+  # gates that behind this macro, which is only implied by IXWEBSOCKET_USE_MBED_TLS on the 2.x API.
+  target_compile_definitions(arcana_ixwebsocket PUBLIC IXWEBSOCKET_USE_TLS IXWEBSOCKET_USE_MBED_TLS IXWEBSOCKET_USE_ZLIB IXWEBSOCKET_USE_MBED_TLS_MIN_VERSION_3)
+  target_link_libraries(arcana_ixwebsocket PUBLIC mbedtls mbedx509 mbedcrypto arcana_zlib Threads::Threads)
+  if(WIN32)
+    target_link_libraries(arcana_ixwebsocket PUBLIC ws2_32 wsock32 shlwapi crypt32 bcrypt)
+  endif()
+
+  file(GLOB ARCANA_ONLINE_SOURCES CONFIGURE_DEPENDS platforms/net/*.cpp)
+  add_library(arcana_online ${ARCANA_ONLINE_SOURCES})
+  target_include_directories(arcana_online PUBLIC platforms/net)
+  target_link_libraries(arcana_online PUBLIC arcana_core nlohmann_json::nlohmann_json arcana_ixwebsocket)
+  if(NOT MSVC)
+    target_compile_options(arcana_online PRIVATE -Wall -Wextra)
+  endif()
 endif()
 add_executable(arcana_sim tools/sim.cpp)
 target_link_libraries(arcana_sim PRIVATE arcana_core)
@@ -112,5 +175,15 @@ if(ARCANA_BUILD_TESTS)
     add_executable(arcana_net_compile tests/network_compile.cpp)
     target_link_libraries(arcana_net_compile PRIVATE arcana_net)
     add_test(NAME net_compile COMMAND arcana_net_compile)
+  endif()
+  if(TARGET arcana_online)
+    function(arcana_online_test name)
+      add_executable(arcana_${name}_tests tests/${name}_tests.cpp)
+      target_link_libraries(arcana_${name}_tests PRIVATE ${ARGN})
+      target_include_directories(arcana_${name}_tests PRIVATE tests)
+      target_compile_definitions(arcana_${name}_tests PRIVATE ARCANA_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+      add_test(NAME ${name} COMMAND arcana_${name}_tests)
+    endfunction()
+    arcana_online_test(online_transport arcana_online)
   endif()
 endif()

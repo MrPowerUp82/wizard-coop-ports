@@ -37,6 +37,7 @@ for target in "${TARGETS[@]}"; do
         mkdir -p dist/linux
         cp build-linux/arcana_desktop dist/linux/
         cp assets/native_atlas_128.png assets/terrain_tiles.png dist/linux/
+        cp assets/cacert.pem dist/linux/
         mkdir -p dist/linux/fonts && cp assets/fonts/* dist/linux/fonts/
         RESULT[$target]="ok  dist/linux/arcana_desktop (testes passaram)"
       else RESULT[$target]="FALHOU"; fi
