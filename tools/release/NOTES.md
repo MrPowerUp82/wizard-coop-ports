@@ -1,6 +1,20 @@
 Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch**, **PS Vita** e **PSP**, com builds para Windows e Linux. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
 
-## Novidades da v0.6.2
+## Novidades da v0.7.0
+
+- **Co-op online no PC (Windows e Linux), junto com quem joga no navegador.** O jogo se conecta ao mesmo servidor da versão web, então as salas são as mesmas: dá para jogar com amigos no PC e no navegador na mesma partida.
+  - **Salas abertas:** a lista mostra as salas com vaga, quem é o anfitrião, quantos jogadores tem e qual ritual.
+  - **Sala fechada:** criada com um código de 6 letras, que só entra quem receber.
+  - **Lobby:** cada um escolhe seu personagem (sem repetir) e o anfitrião começa a partida. Quem chegar depois entra com a partida em andamento.
+  - **Caiu a internet?** O jogo tenta voltar sozinho por cerca de 30 segundos e você volta para a mesma partida, no mesmo personagem.
+  - **Sinais para os aliados:** Q (venham aqui), E (preciso de ajuda), X (cuidado) e C (olhem ali). No controle, segure X/Y e aperte uma direção. Quem está longe vê uma seta na borda da tela.
+  - **Digitação com controle:** um teclado na tela para o nome e o código da sala, pensado para o Steam Deck. No teclado do PC dá para digitar e colar normalmente.
+- **As moedas da partida online vão para o seu Grimório**, como no jogo offline, e as melhorias que você já comprou valem online.
+- **Conexão protegida:** a ligação com o servidor usa TLS com verificação de certificado (o pacote de certificados vai junto, em `assets/cacert.pem`). O arquivo `THIRD_PARTY_NOTICES.txt` traz as licenças das bibliotecas usadas nessa parte.
+- **Servidor:** por padrão o jogo usa o servidor oficial. Para apontar para outro, use `--server wss://endereco/ws` ou a linha `pref.server=` no `profile.ini`.
+- **Switch, Vita e PSP seguem só com o co-op local**, sem nenhuma mudança de desempenho: nada de rede entra nesses builds.
+
+## Da v0.6.2
 
 - **Dicas de controle corretas em cada plataforma:** antes as dicas da tela mostravam sempre A/B/X/Y. No PC (Windows/Linux) elas agora acompanham o dispositivo usado por último: no teclado aparecem Enter, Backspace e R, e ao usar um controle voltam para A/B/X/Y. No PS Vita e no PSP aparecem X, O e Quadrado. Vale para o menu, a escolha de poderes, o Grimório, a tela de fim de partida e os Créditos.
 
