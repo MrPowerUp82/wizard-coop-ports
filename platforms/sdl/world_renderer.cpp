@@ -462,6 +462,9 @@ void drawEffectsNormal(Frame& f) {
       case FxKind::Combo:
         b.textOutlined(fx.x, fx.y - 48 - progress * 25, fx.text ? fx.text : "", 12, A(fx.color, fade), A(rgba(10, 10, 16), fade * 0.8f), Align::Center);
         break;
+      case FxKind::Signal:
+        b.textOutlined(fx.x, fx.y - 64, fx.text ? fx.text : "", 16, A(fx.color, std::min(1.0f, fade * 3)), A(rgba(10, 10, 16), std::min(1.0f, fade * 3)), Align::Center);
+        break;
       case FxKind::Chain:
         jagged(b, fx, progress, 5, A(fx.color, fade * 0.35f));
         jagged(b, fx, progress, 2, A(hex(0xf4fbff), fade));
@@ -538,6 +541,12 @@ void drawEffectsAdditive(Frame& f) {
       case FxKind::Ring:
         b.circle(fx.x, fx.y, 5 + easeOut(progress) * fx.radius, A(fx.color, fade * fade), 1 + fade * 2);
         break;
+      case FxKind::Signal: {
+        const float pulse = std::fmod(fx.age, 1.0f);
+        b.circle(fx.x, fx.y, 20 + pulse * 70, A(fx.color, (1 - pulse) * fade), 3);
+        b.circle(fx.x, fx.y, 10, A(fx.color, fade * 0.8f));
+        break;
+      }
       case FxKind::Spark: {
         const float x = fx.x + fx.vx * fx.age, y = fx.y + fx.vy * fx.age + 35 * fx.age * fx.age;
         b.line(x, y, x - fx.vx * 0.045f, y - (fx.vy + 70 * fx.age) * 0.045f, 2 * fade + 0.5f, A(fx.color, fade));
@@ -787,6 +796,8 @@ void drawWorld(BatchRenderer& b, const GameState& game, const Animator& anim, co
   }
   if (game.altar && (game.altar->status == "waiting" || game.altar->status == "active") && !inView(game.altar->x, game.altar->y))
     edgeArrow(b, v, static_cast<float>(game.altar->x), static_cast<float>(game.altar->y), hex(0xffd36b), "ALTAR");
+  for (const auto& fx : anim.effects())
+    if (fx.kind == FxKind::Signal && !inView(fx.x, fx.y)) edgeArrow(b, v, fx.x, fx.y, fx.color, fx.text ? fx.text : "SINAL");
 }
 
 } // namespace arcana::sdl

@@ -5,7 +5,9 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <new>
+#include <optional>
 
 namespace arcana::sdl {
 namespace {
@@ -116,6 +118,15 @@ void formatClock(char* out, std::size_t n, double seconds) {
   std::snprintf(out, n, "%d:%02d", s / 60, s % 60);
 }
 
+const char* signalText(const std::string& kind) {
+  // src/feedback.js SIGNAL_TEXT.
+  if (kind == "here") return "venham aqui!";
+  if (kind == "help") return "preciso de ajuda!";
+  if (kind == "danger") return "cuidado!";
+  if (kind == "look") return "olhem ali!";
+  return "sinal";
+}
+
 } // namespace
 
 Frontend::Frontend(FrontendOptions options) : options_(std::move(options)) {
@@ -147,7 +158,9 @@ void Frontend::readEdges(const InputFrame& input) {
 }
 
 Player* Frontend::playerForSlot(int slot) {
-  const auto it = state_.players.find(kIds[slot]);
+  const std::string& id = localIds_[static_cast<std::size_t>(slot)];
+  if (id.empty()) return nullptr;
+  const auto it = state_.players.find(id);
   return it == state_.players.end() ? nullptr : &it->second;
 }
 
@@ -161,10 +174,10 @@ Player* Frontend::chooser(int* slotOut) {
 }
 
 void Frontend::startRun() {
+  depositRun(); // leaving a run early (restart) still banks its coins
   // Rebuild in place: GameState is ~200 KB and an assignment from a temporary would put a second
   // copy on the (small, on Vita) main-thread stack. Prvalue + placement new is guaranteed elision.
   state_.~GameState();
-  depositRun(); // leaving a run early (restart) still banks its coins
   new (&state_) GameState(createGameState(kCampaigns[std::clamp(campaign_, 0, 2)].id));
   // Permanent upgrades apply to everyone; the loadout is player 1's, as in the web client.
   const Loadout loadout{weapon_, special_};
@@ -176,6 +189,18 @@ void Frontend::startRun() {
     p.y = (slot >= 2 ? 60 : 0);
     state_.players[p.id] = std::move(p);
   }
+  onlineMatch_ = false;
+  localIds_ = {kIds[0], kIds[1], kIds[2], kIds[3]};
+  resetRunView();
+  profile_.prefs.characters = character_;
+  profile_.prefs.campaign = kCampaigns[std::clamp(campaign_, 0, 2)].id;
+  profile_.prefs.weapon = weapon_;
+  profile_.prefs.special = special_;
+  saveProfileNow();
+  screen_ = Screen::Playing;
+}
+
+void Frontend::resetRunView() {
   clock_.reset();
   choiceKey_.clear();
   choiceIndex_ = 0;
@@ -191,12 +216,7 @@ void Frontend::startRun() {
   overSoundPlayed_ = false;
   deposited_ = false;
   earned_ = 0;
-  profile_.prefs.characters = character_;
-  profile_.prefs.campaign = kCampaigns[std::clamp(campaign_, 0, 2)].id;
-  profile_.prefs.weapon = weapon_;
-  profile_.prefs.special = special_;
-  saveProfileNow();
-  screen_ = Screen::Playing;
+  overTime_ = 0;
 }
 
 bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
@@ -214,14 +234,16 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
       if (quitRequested_) return false;
       break;
     case Screen::Shop: updateShop(); announce_.age += frameSeconds; toast_.age += frameSeconds; break;
+    case Screen::Online: updateOnlineMenu(input); announce_.age += frameSeconds; toast_.age += frameSeconds; break;
     case Screen::Playing: updatePlaying(frameSeconds, input); break;
     case Screen::Paused: updatePaused(); break;
     case Screen::Over: updateOver(); break;
   }
   updateMusic();
-  if (screen_ != Screen::Title && screen_ != Screen::Shop) {
-    // Animation time stops while paused or choosing a power, exactly like the web client.
-    anim_.update(state_, frameSeconds, screen_ == Screen::Paused || (screen_ == Screen::Playing && chooser()));
+  if (screen_ != Screen::Title && screen_ != Screen::Shop && screen_ != Screen::Online) {
+    // Animation time stops while paused or choosing a power, exactly like the web client (online the
+    // match keeps running on the server, so it never stops there).
+    anim_.update(state_, frameSeconds, screen_ == Screen::Paused || (screen_ == Screen::Playing && chooser() && !onlineMatch_));
     if (anim_.hits() > 0) sfx(Sound::Hit);
     if (anim_.kills() > 0) sfx(Sound::Kill);
     announce_.age += frameSeconds;
@@ -231,9 +253,10 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
   return true;
 }
 
-native::StaticVector<Frontend::TitleItem, 6> Frontend::titleItems() const {
-  native::StaticVector<TitleItem, 6> items;
+native::StaticVector<Frontend::TitleItem, 7> Frontend::titleItems() const {
+  native::StaticVector<TitleItem, 7> items;
   items.push_back(TitleItem::Play);
+  if (online_) items.push_back(TitleItem::Online);
   items.push_back(TitleItem::Campaign);
   if (unlocked("arsenal")) items.push_back(TitleItem::Weapon);
   if (unlocked("secondSpell")) items.push_back(TitleItem::Special);
@@ -274,6 +297,7 @@ void Frontend::updateTitle() {
   sfx(Sound::Click);
   switch (items[static_cast<std::size_t>(menuIndex_)]) {
     case TitleItem::Play: startRun(); break;
+    case TitleItem::Online: enterOnline(); break;
     case TitleItem::Campaign: cycleCampaign(); break;
     case TitleItem::Weapon: {
       // Nenhuma -> each starting weapon -> Nenhuma.
@@ -320,7 +344,8 @@ void Frontend::depositRun() {
   if (deposited_ || state_.players.empty() || options_.autoplay) return;
   deposited_ = true;
   int coins = 0;
-  for (const auto& [_, p] : state_.players) coins = std::max(coins, p.coins);
+  if (onlineMatch_) { if (const Player* me = playerForSlot(0)) coins = me->coins; } // online: only your own coins
+  else for (const auto& [_, p] : state_.players) coins = std::max(coins, p.coins);
   earned_ = coins;
   deposit(profile_, coins);
   observeCodex(profile_, state_, playerForSlot(0));
@@ -374,6 +399,7 @@ void Frontend::cycleCharacter(int slot, int direction, bool includeCurrent) {
 }
 
 void Frontend::updatePlaying(double frameSeconds, const InputFrame& input) {
+  if (onlineMatch_) { updateOnlinePlaying(frameSeconds, input); return; }
   if (anyPressed(ActPause)) { screen_ = Screen::Paused; pauseIndex_ = 0; return; }
 
   int chooserSlot = -1;
@@ -469,6 +495,10 @@ void Frontend::updatePaused() {
 }
 
 void Frontend::updateOver() {
+  if (onlineMatch_) {
+    if (options_.autoplay || anyPressed(ActConfirm) || anyPressed(ActCancel)) leaveOnlineMatch();
+    return;
+  }
   if (options_.autoplay) { startRun(); return; }
   if (anyPressed(ActConfirm)) startRun();
   else if (anyPressed(ActCancel)) screen_ = Screen::Title;
@@ -497,6 +527,168 @@ void Frontend::autoplayInput(InputFrame& input) {
   }
 }
 
+void Frontend::setOnline(std::unique_ptr<OnlinePort> online) {
+  online_ = std::move(online);
+  if (online_ && options_.startOnline) enterOnline();
+}
+
+bool Frontend::wantsTextInput() const { return screen_ == Screen::Online && online_ && online_->wantsText(); }
+
+void Frontend::enterOnline() {
+  screen_ = Screen::Online;
+  online_->openMenu(profile_);
+}
+
+void Frontend::updateOnlineMenu(const InputFrame& input) {
+  const std::string name = profile_.prefs.name;
+  const auto result = online_->updateMenu(edges_[0].pressed, edges_[0].held, input.text, profile_);
+  if (profile_.prefs.name != name) saveProfileNow();
+  if (result == OnlinePort::MenuResult::Title) { screen_ = Screen::Title; sfx(Sound::Click); }
+  else if (result == OnlinePort::MenuResult::Play) startOnlineRun();
+}
+
+void Frontend::startOnlineRun() {
+  state_.~GameState();
+  new (&state_) GameState();
+  onlineMatch_ = true;
+  onlineMenuOpen_ = false;
+  sentChoiceKey_.clear();
+  localIds_ = {online_->localId(), "", "", ""};
+  resetRunView();
+  screen_ = Screen::Playing;
+}
+
+void Frontend::leaveOnlineMatch() {
+  depositRun();
+  online_->leave();
+  onlineMatch_ = false;
+  onlineMenuOpen_ = false;
+  screen_ = Screen::Online;
+}
+
+void Frontend::updateOnlinePlaying(double frameSeconds, const InputFrame& input) {
+  // No pause online: Esc/Start opens a small menu over the match, which keeps running.
+  if (anyPressed(ActPause)) { onlineMenuOpen_ = !onlineMenuOpen_; pauseIndex_ = 0; sfx(Sound::Click); }
+  else if (onlineMenuOpen_) {
+    if (pressed(0, ActUp) || pressed(0, ActDown)) { pauseIndex_ = 1 - pauseIndex_; sfx(Sound::Click); }
+    if (pressed(0, ActCancel)) onlineMenuOpen_ = false;
+    else if (pressed(0, ActConfirm)) {
+      if (pauseIndex_ == 1) { leaveOnlineMatch(); return; }
+      onlineMenuOpen_ = false;
+    }
+  }
+  const auto& pad = input.pads[0];
+  // `real` is float on the PSP build: keep brace-init free of double -> float narrowing.
+  Vec2 move{onlineMenuOpen_ ? real{0} : static_cast<real>(pad.x), onlineMenuOpen_ ? real{0} : static_cast<real>(pad.y)};
+  if (const Player* me = playerForSlot(0); me && me->alive && !onlineMenuOpen_ && !state_.over) {
+    if (!me->pendingPowers.empty()) {
+      updateOnlineChooser(*me);
+      move = {};
+    } else {
+      sentChoiceKey_.clear();
+      if (pressed(0, ActSpecial)) online_->special();
+      if (pressed(0, ActDash)) online_->dash(pad.x == 0 && pad.y == 0 ? Vec2{me->moveX, me->moveY} : Vec2{pad.x, pad.y});
+      sendSignals(*me);
+    }
+  }
+  const auto t0 = Clock::now();
+  online_->frame(frameSeconds, move, state_);
+  timings_.updateMs = msSince(t0);
+  timings_.steps = 0;
+  observeEvents();
+  if (auto notice = online_->takeNotice()) announce(*notice, kMuted, true);
+  if (online_->closed()) { leaveOnlineMatch(); return; }
+  if (state_.over) {
+    overTime_ += frameSeconds;
+    if (overTime_ > 1.2) { screen_ = Screen::Over; depositRun(); }
+  } else {
+    overTime_ = 0;
+  }
+}
+
+void Frontend::updateOnlineChooser(const Player& me) {
+  std::string key;
+  for (const auto& id : me.pendingPowers) { key += id; key += ','; }
+  if (key != choiceKey_) { choiceKey_ = key; choiceIndex_ = 0; }
+  if (key == sentChoiceKey_) return; // already answered: waiting for the server to apply it
+  const int count = static_cast<int>(me.pendingPowers.size());
+  if (pressed(0, ActLeft) || pressed(0, ActUp)) { choiceIndex_ = (choiceIndex_ + count - 1) % count; sfx(Sound::Click); }
+  if (pressed(0, ActRight) || pressed(0, ActDown)) { choiceIndex_ = (choiceIndex_ + 1) % count; sfx(Sound::Click); }
+  if (pressed(0, ActAlt)) {
+    if (me.rerolls > 0) { online_->reroll(); sentChoiceKey_ = key; sfx(Sound::Click); }
+    return;
+  }
+  if (pressed(0, ActConfirm) || options_.autoplay) {
+    online_->choosePower(me.pendingPowers[static_cast<std::size_t>(std::clamp(choiceIndex_, 0, count - 1))]);
+    sentChoiceKey_ = key;
+    sfx(Sound::Power);
+  }
+}
+
+void Frontend::sendSignals(const Player& me) {
+  // Keyboard Q/E/X/C, or hold Alt (X/Y on a gamepad) and press a direction (web: Q/E/X and a click).
+  const char* kind = nullptr;
+  if (pressed(0, ActSignalHere)) kind = "here";
+  else if (pressed(0, ActSignalHelp)) kind = "help";
+  else if (pressed(0, ActSignalDanger)) kind = "danger";
+  else if (pressed(0, ActSignalLook)) kind = "look";
+  else if (edges_[0].held & ActAlt) {
+    if (pressed(0, ActUp)) kind = "here";
+    else if (pressed(0, ActLeft)) kind = "help";
+    else if (pressed(0, ActRight)) kind = "danger";
+    else if (pressed(0, ActDown)) kind = "look";
+  }
+  if (!kind) return;
+  std::optional<Vec2> at;
+  if (std::strcmp(kind, "look") == 0) {
+    // There is no mouse click in the world: "look there" points 300 units ahead of where you face.
+    const real len = std::max<real>(real(1e-6), std::hypot(me.moveX, me.moveY));
+    at = Vec2{me.x + me.moveX / len * 300, me.y + me.moveY / len * 300};
+  }
+  online_->signal(kind, at);
+  sfx(Sound::Signal);
+}
+
+native::StaticVector<const Player*, cfg::MAX_PLAYERS> Frontend::hudPlayers() const {
+  native::StaticVector<const Player*, cfg::MAX_PLAYERS> list;
+  auto find = [&](const std::string& id) -> const Player* {
+    if (id.empty()) return nullptr;
+    const auto it = state_.players.find(id);
+    return it == state_.players.end() ? nullptr : &it->second;
+  };
+  if (!onlineMatch_) {
+    for (const auto& id : localIds_) list.push_back(find(id)); // fixed corners per local slot
+    return list;
+  }
+  // Online: you first, then allies by character.
+  list.push_back(find(localIds_[0]));
+  for (int c = 0; c < 4; ++c)
+    for (const auto& [id, p] : state_.players)
+      if (id != localIds_[0] && p.color == c && !list.full()) list.push_back(&p);
+  return list;
+}
+
+void Frontend::renderOnlineOverlay(BatchRenderer& b, float width, float height) {
+  const float s = uiScale(height);
+  if (online_->reconnecting()) {
+    const char* text = "Reconectando ao servidor...";
+    const float w = b.textWidth(text, 22 * s) + 40 * s;
+    b.rect(width * 0.5f - w * 0.5f, height * 0.5f - 24 * s, w, 48 * s, rgba(8, 10, 20, 220));
+    b.text(width * 0.5f, height * 0.5f - 12 * s, text, 22 * s, kGold, Align::Center);
+  }
+  if (!onlineMenuOpen_) return;
+  b.rect(0, 0, width, height, rgba(0, 0, 0, 140));
+  b.text(width * 0.5f, height * 0.28f, "A partida continua", 40 * s, kText, Align::Center);
+  const char* items[2] = {"Continuar", "Sair da sala"};
+  for (int i = 0; i < 2; ++i) {
+    const float y = height * 0.4f + i * 60 * s;
+    const bool sel = i == pauseIndex_;
+    b.rect(width * 0.5f - 200 * s, y, 400 * s, 50 * s, sel ? rgba(40, 44, 80, 240) : rgba(18, 20, 36, 220));
+    if (sel) b.frame(width * 0.5f - 200 * s, y, 400 * s, 50 * s, 3 * s, kGold);
+    b.text(width * 0.5f, y + 11 * s, items[i], 24 * s, sel ? kText : kMuted, Align::Center);
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Rendering
 
@@ -507,11 +699,15 @@ void Frontend::render(BatchRenderer& batch, float width, float height) {
     renderTitle(batch, width, height);
   } else if (screen_ == Screen::Shop) {
     renderShop(batch, width, height);
+  } else if (screen_ == Screen::Online) {
+    online_->renderMenu(batch, width, height, uiScale(height));
+    renderFeedback(batch, width, height);
   } else {
     renderWorld(batch, width, height);
     renderHud(batch, width, height);
     renderFeedback(batch, width, height);
     if (screen_ == Screen::Playing && chooser()) renderChooser(batch, width, height);
+    if (screen_ == Screen::Playing && onlineMatch_) renderOnlineOverlay(batch, width, height);
     if (screen_ == Screen::Paused) renderPause(batch, width, height);
     if (screen_ == Screen::Over) renderOver(batch, width, height);
   }
@@ -524,6 +720,7 @@ void Frontend::renderWorld(BatchRenderer& b, float width, float height) {
   real minX = 1e30, maxX = -1e30, minY = 1e30, maxY = -1e30;
   bool any = false;
   for (const auto& [_, p] : state_.players) {
+    if (onlineMatch_ && p.id != localIds_[0]) continue; // online: the camera follows you only
     minX = std::min(minX, p.x); maxX = std::max(maxX, p.x); minY = std::min(minY, p.y); maxY = std::max(maxY, p.y);
     any = true;
   }
@@ -583,6 +780,10 @@ void Frontend::observeEvents() {
     else if (k == "thiefEscaped") announce("O ladrão escapou com o tesouro.", kMuted, true);
     else if (k == "loop") { std::snprintf(scratch_, sizeof scratch_, "Volta %d: os reinos despertam mais fortes", state_.loop + 1); announce(scratch_, danger); }
     else if (k == "phoenix") announce("Fênix! Um arcanista renasceu", gold);
+    else if (k == "signal" && onlineMatch_ && e.player != localIds_[0]) {
+      std::snprintf(scratch_, sizeof scratch_, "%s: %s", e.name.c_str(), signalText(e.text));
+      announce(scratch_, playerColor(e.color), true);
+    }
     playEventSound(e);
   }
   // src/feedback.js: hazards, and per-player changes (split-screen players share one sound per frame).
@@ -631,6 +832,7 @@ void Frontend::playEventSound(const Event& e) {
   else if (k == "encounter") sfx(Sound::Encounter);
   else if (k == "loop") sfx(Sound::Loop);
   else if (k == "phoenix") sfx(Sound::Phoenix);
+  else if (k == "signal") sfx(Sound::Signal);
   else if (!near) return;
   else if (k == "evade") sfx(Sound::Shoot);
   else if (k == "magnet") sfx(Sound::Magnet);
@@ -712,16 +914,19 @@ void Frontend::renderHud(BatchRenderer& b, float width, float height) {
     break;
   }
 
-  // One panel per player, in the four corners.
-  for (int slot = 0; slot < cfg::MAX_PLAYERS; ++slot) {
-    const Player* p = playerForSlot(slot);
+  // One panel per player, in the four corners (online: you top-left, allies in the other corners).
+  const auto hud = hudPlayers();
+  for (std::size_t index = 0; index < hud.size(); ++index) {
+    const Player* p = hud[index];
     if (!p) continue;
+    const int slot = static_cast<int>(index);
     const float pw = 310 * s, ph = 86 * s;
     const float x = (slot % 2 == 0) ? 10 * s : width - pw - 10 * s;
     const float y = (slot < 2) ? 10 * s : height - ph - 10 * s;
     b.rect(x, y, pw, ph, kPanel);
     b.rect(x, y, 4 * s, ph, playerColor(p->color));
-    std::snprintf(scratch_, sizeof scratch_, "P%d  Nv %d", slot + 1, p->level);
+    if (onlineMatch_) std::snprintf(scratch_, sizeof scratch_, "%s  Nv %d", p->name.c_str(), p->level);
+    else std::snprintf(scratch_, sizeof scratch_, "P%d  Nv %d", slot + 1, p->level);
     b.text(x + 12 * s, y + 4 * s, scratch_, 20 * s, playerColor(p->color));
     std::snprintf(scratch_, sizeof scratch_, "%d abates · %d moedas", p->stats.kills, p->coins);
     b.text(x + pw - 8 * s, y + 7 * s, scratch_, 15 * s, kMuted, Align::Right);
@@ -758,7 +963,8 @@ void Frontend::renderChooser(BatchRenderer& b, float width, float height) {
   if (!p) return;
   const float s = uiScale(height);
   b.rect(0, 0, width, height, rgba(4, 6, 14, 170));
-  std::snprintf(scratch_, sizeof scratch_, "P%d subiu para o nível %d - escolha um poder", slot + 1, p->level);
+  if (onlineMatch_) std::snprintf(scratch_, sizeof scratch_, "Você subiu para o nível %d - escolha um poder", p->level);
+  else std::snprintf(scratch_, sizeof scratch_, "P%d subiu para o nível %d - escolha um poder", slot + 1, p->level);
   b.text(width * 0.5f, height * (options_.compact ? 0.08f : 0.16f), scratch_, (options_.compact ? 22 : 30) * s, playerColor(p->color), Align::Center);
 
   const int count = static_cast<int>(p->pendingPowers.size());
@@ -813,6 +1019,10 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
     const char* value = nullptr;
     switch (items[i]) {
       case TitleItem::Play: b.text(mx + 20 * s, y + 8 * s, "Jogar", 24 * s, sel ? kGold : kMuted); if (sel) hint = options_.compact ? "Começa com o arcanista ao lado." : "Começa com os arcanistas prontos abaixo."; break;
+      case TitleItem::Online:
+        b.text(mx + 20 * s, y + 8 * s, "Jogar online", 24 * s, sel ? kGold : kMuted);
+        if (sel) hint = "Co-op pela internet, junto com quem joga no navegador.";
+        break;
       case TitleItem::Campaign:
         b.text(mx + 20 * s, y + 8 * s, "Ritual", 24 * s, color);
         value = kCampaigns[campaign_].title;
@@ -945,11 +1155,14 @@ void Frontend::renderOver(BatchRenderer& b, float width, float height) {
   std::snprintf(scratch_, sizeof scratch_, "Tempo %s · Fase %d/6", clock, state_.phase + 1);
   b.text(width * 0.5f, height * 0.36f, scratch_, 26 * s, kText, Align::Center);
   float y = height * 0.45f;
-  for (int slot = 0; slot < cfg::MAX_PLAYERS; ++slot) {
-    const Player* p = playerForSlot(slot);
+  const auto hud = hudPlayers();
+  for (std::size_t index = 0; index < hud.size(); ++index) {
+    const Player* p = hud[index];
     if (!p) continue;
-    std::snprintf(scratch_, sizeof scratch_, "P%d · nível %d · %d abates · %d de dano · %d moedas", slot + 1, p->level, p->stats.kills,
-                  static_cast<int>(p->stats.damage), p->coins);
+    if (onlineMatch_) std::snprintf(scratch_, sizeof scratch_, "%s · nível %d · %d abates · %d de dano · %d moedas", p->name.c_str(), p->level,
+                                    p->stats.kills, static_cast<int>(p->stats.damage), p->coins);
+    else std::snprintf(scratch_, sizeof scratch_, "P%d · nível %d · %d abates · %d de dano · %d moedas", static_cast<int>(index) + 1, p->level,
+                       p->stats.kills, static_cast<int>(p->stats.damage), p->coins);
     b.text(width * 0.5f, y, scratch_, 22 * s, playerColor(p->color), Align::Center);
     y += 34 * s;
   }
@@ -957,7 +1170,7 @@ void Frontend::renderOver(BatchRenderer& b, float width, float height) {
     std::snprintf(scratch_, sizeof scratch_, "+%d moedas guardadas no Grimório · total %d", earned_, profile_.coins);
     b.text(width * 0.5f, height * 0.72f, scratch_, 24 * s, kGold, Align::Center);
   }
-  b.text(width * 0.5f, height * 0.8f, "A jogar de novo · B menu principal", 22 * s, kMuted, Align::Center);
+  b.text(width * 0.5f, height * 0.8f, onlineMatch_ ? "A ou B: voltar ao menu online" : "A jogar de novo · B menu principal", 22 * s, kMuted, Align::Center);
 }
 
 void Frontend::renderPerf(BatchRenderer& b, float width, float height) {

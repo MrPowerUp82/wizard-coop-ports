@@ -17,7 +17,7 @@ namespace arcana::sdl {
 
 enum class FxKind : std::uint8_t {
   Ring, Spark, Mote, Nova, Meteor, Impact, Thorns, Lunar, Bloom, Implode, Convergence,
-  Chain, FamiliarStrike, Sigil, Ascend, Afterimage, Ghost, Combo,
+  Chain, FamiliarStrike, Sigil, Ascend, Afterimage, Ghost, Combo, Signal,
 };
 enum class MoteShape : std::uint8_t { Flake, Ember, Leaf, Star, Heal, Smoke };
 
