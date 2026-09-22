@@ -215,6 +215,11 @@ void Animator::handleEvent(const Event& e) {
                                                  {"CHOQUE TÉRMICO · EM EQUIPE", "CONDUÇÃO · EM EQUIPE", "ECLIPSE · EM EQUIPE"}};
     const int which = e.text == "thermal" ? 0 : e.text == "conduction" ? 1 : 2;
     if (Effect* fx = push(FxKind::Combo, x, y, team ? 1.1f : 0.8f)) { fx->color = team ? 0xffffffffu : hex(0xffe49b); fx->text = labels[team][which]; }
+  } else if (k == "signal") {
+    // An ally's call: a pulse where they pointed, with an off-screen arrow while it lasts.
+    static constexpr const char* labels[] = {"VENHAM AQUI", "AJUDA", "CUIDADO", "OLHEM ALI"};
+    const int which = e.text == "help" ? 1 : e.text == "danger" ? 2 : e.text == "look" ? 3 : 0;
+    if (Effect* fx = push(FxKind::Signal, x, y, 3.0f, true)) { fx->color = native::playerColor(e.color); fx->text = labels[which]; }
   } else if (k == "convergence") {
     if (Effect* fx = push(FxKind::Convergence, x, y, 1, true)) { fx->radius = e.r > 0 ? static_cast<float>(e.r) : 320; fx->color = element(e.color); fx->color2 = 0xffffffffu; }
     motes(x, y, MoteShape::Star, 0xffffffffu, 24, 380, 0, 1, 0, 7, 2.2f);

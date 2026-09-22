@@ -31,7 +31,7 @@ Fora (próximas etapas):
 
 ## Arquitetura
 
-O `arcana_core` não muda. A rede fica em módulos sem SDL, em um alvo CMake novo (`arcana_online`),
+O `arcana_core` só ganha acréscimos: `Event::player/name` e `playerMovement()`. A rede fica em módulos sem SDL, em um alvo CMake novo (`arcana_online`),
 separado do `arcana_net` antigo (Beast).
 
 ```
@@ -45,8 +45,11 @@ platforms/net/
   session.{hpp,cpp}        porta do net.js: estado da sala/lobby, buffer de 30 snapshots,
                            interpolação, predição/reconciliação, ping/RTT, reconexão por token.
   room_list.{hpp,cpp}      conexão curta para `listRooms`.
+platforms/online/
+  online_menu.{hpp,cpp}    Tela Online, criação de sala, Lobby, entrada de texto/código. Fora de
+                           platforms/sdl/ porque o Makefile do Switch compila platforms/sdl/*.cpp
+                           por wildcard, e o Switch não tem online.
 platforms/sdl/
-  online_screens.{hpp,cpp} Tela Online, criação de sala, Lobby, entrada de texto/código.
   frontend.{hpp,cpp}       modo online: em vez de updateGame, grava a view da Session em state_.
 ```
 
@@ -64,9 +67,10 @@ ele o item "Online" não aparece no título.
 - Meta-progressão: `create`/`join` enviam `meta` (ranks do Grimório) e `loadout`, como a web; o
   servidor valida. No fim da partida, as moedas do jogador local são depositadas no save local pelo
   mesmo caminho do offline (`depositRun`).
-- Nome do jogador salvo no `profile.ini` (`name=`), até 16 caracteres.
+- Nome do jogador salvo no `profile.ini` (`pref.name=`), até 16 caracteres.
 - Servidor: padrão `wss://vps65228.publiccloud.com.br/ws` (igual a `DEFAULT_SERVER` do
-  `meu-game/src/menu.js`); sobrescrito por `server=` no `profile.ini` ou `--server <url>`.
+  `meu-game/src/menu.js`); sobrescrito por `--server <url>`, ou servidor alternativo em
+  `pref.server=` no `profile.ini`.
 
 ## Telas e fluxo
 
@@ -97,12 +101,14 @@ Título -> Online (só PC)
 ## Rede e sincronização
 
 Por frame (60 Hz no cliente):
-1. Thread de rede: recebe texto (com `permessage-deflate`), faz parse do JSON, `protocol::decode`
-   e empurra o `Snapshot` numa fila com trava (máx. 30; descarta o mais antigo).
+1. Thread de rede: recebe texto e enfileira; o parse do JSON e o `decodeSnapshot` rodam no
+   `Session::update()` da thread principal (≈0,3 ms por snapshot no PC).
 2. Thread principal: drena a fila; envia input; interpola em `renderT = (now - clockOffset) - 0.1 s`;
    prevê o jogador local; escreve a view em `state_`.
 
-Algoritmos portados do `net.js`, com as mesmas constantes:
+Algoritmos portados do `net.js`, com as mesmas constantes (duas diferenças propositais, comentadas
+no código: o input tem um piso de 50 ms entre envios, para caber no limite do servidor, e a
+extrapolação de tiros para no máximo 0,5 s à frente, para uma reconexão longa não arrastar o mundo):
 - `clockOffset = min(sample, clockOffset + 4 ms)`, com `sample = chegada - state.time`.
 - RTT: ping a cada 2 s, média `rtt*0.7 + amostra*0.3`.
 - Interpolação linear de jogadores, inimigos, gemas e familiar por id; `orbitAngle` por ângulo;
@@ -111,8 +117,8 @@ Algoritmos portados do `net.js`, com as mesmas constantes:
   aplicada ao input local; histórico de 1,5 s; reconciliação comparando com a posição prevista há
   cerca de um RTT, fator 0,35; erro > 220 unidades corrige de vez; mudança de `motionId` (esquiva)
   volta para a posição do servidor.
-- Campos que o renderer usa e o snapshot não traz (ex.: `Enemy::age`) são preservados por id entre
-  snapshots; entidades novas começam do zero.
+- O renderer só usa campos presentes no snapshot (conferido), então nada é preservado entre
+  snapshots.
 
 Envio de input: quantizado em passos de 1/32, no máximo 20 envios/s quando muda, mais keep-alive a
 cada 100 ms. Assim o cliente fica bem abaixo do limite de 50 mensagens/s do servidor, que descarta o

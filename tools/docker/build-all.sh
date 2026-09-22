@@ -3,6 +3,7 @@
 #
 #   tools/docker/build-all.sh                 # host tests + Linux desktop + Switch + Vita
 #   tools/docker/build-all.sh switch vita     # only some targets (host | switch | vita | windows | psp | psp-probe)
+#   tools/docker/build-all.sh online-e2e      # cross-play com o servidor do ../meu-game (precisa do host antes)
 #
 # Needs only Docker. Images: arcana-host and arcana-windows (built from tools/docker/*.Dockerfile),
 # devkitpro/devkita64, vitasdk/vitasdk and pspdev/pspdev (pulled on first use).
@@ -34,9 +35,10 @@ for target in "${TARGETS[@]}"; do
     host)
       docker build -q -t arcana-host -f tools/docker/host.Dockerfile tools/docker >/dev/null
       if run arcana-host tools/docker/host-build.sh; then
-        mkdir -p dist/linux
+        mkdir -p dist/linux dist/linux/assets
         cp build-linux/arcana_desktop dist/linux/
         cp assets/native_atlas_128.png assets/terrain_tiles.png dist/linux/
+        cp assets/cacert.pem dist/linux/assets/
         mkdir -p dist/linux/fonts && cp assets/fonts/* dist/linux/fonts/
         RESULT[$target]="ok  dist/linux/arcana_desktop (testes passaram)"
       else RESULT[$target]="FALHOU"; fi
@@ -74,7 +76,11 @@ for target in "${TARGETS[@]}"; do
         RESULT[$target]="ok  dist/psp-probe/EBOOT.PBP"
       else RESULT[$target]="FALHOU"; fi
       ;;
-    *) echo "alvo desconhecido: $target (use host, switch, vita, windows, psp ou psp-probe)"; exit 2 ;;
+    online-e2e)
+      if bash tools/docker/online-e2e.sh; then RESULT[$target]="ok  dois bots C++ jogaram no servidor do meu-game"
+      else RESULT[$target]="FALHOU"; fi
+      ;;
+    *) echo "alvo desconhecido: $target (use host, switch, vita, windows, psp, psp-probe ou online-e2e)"; exit 2 ;;
   esac
 done
 

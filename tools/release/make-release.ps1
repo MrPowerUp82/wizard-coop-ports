@@ -46,6 +46,8 @@ New-Item -ItemType Directory -Force "$Stage\assets\fonts" | Out-Null
 Copy-Item dist\linux\arcana_desktop $Stage\
 Copy-Item assets\native_atlas_128.png, assets\terrain_tiles.png "$Stage\assets\"
 Copy-Item assets\fonts\* "$Stage\assets\fonts\"
+Copy-Item assets\cacert.pem "$Stage\assets\"
+Copy-Item THIRD_PARTY_NOTICES.txt "$Stage\"
 docker run --rm -v "${Root}:/src" -w /src arcana-host bash -c "chmod +x '$($Stage -replace '\\','/')/arcana_desktop' && tar -C dist/release/stage --owner=0 --group=0 --mtime=@$CommitTime -czf '$($Out -replace '\\','/')/$Name-linux-x86_64.tar.gz' '$Name-linux-x86_64'"
 if ($LASTEXITCODE -ne 0) { throw 'falha ao empacotar o build Linux' }
 

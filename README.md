@@ -26,6 +26,11 @@ fechar o jogo ou acabar a bateria no meio não corrompe o progresso, e reinstala
   poderes, evoluções, combos, encontros (altar, mercador, santuário, ladrão), maldições e reviver.
 - **Co-op local para até 4 jogadores** em tela compartilhada (Switch, Vita e PC). No Switch, cada
   jogador pode usar um Joy-Con na horizontal, um par de Joy-Cons, o modo portátil ou um Pro Controller.
+- **Co-op online no PC (Windows e Linux)**, no mesmo servidor da versão web: dá para jogar junto com
+  quem está no navegador. Lista de salas abertas, sala fechada com código, lobby com troca de
+  personagem, ritual e maldições, entrada com a partida em andamento e reconexão automática.
+  Sinais para os aliados: Q (venham aqui), E (ajuda), X (cuidado), C (olhem ali); no controle,
+  segure X/Y e aperte uma direção.
 - **Quatro personagens** (Azul, Vermelho, Verde e Roxo), cada um com o próprio tiro e especial; no
   co-op ninguém repete personagem.
 - **Grimório (meta-progressão):** as moedas de cada partida compram os 15 upgrades permanentes do
@@ -46,6 +51,7 @@ fechar o jogo ou acabar a bateria no meio não corrompe o progresso, e reinstala
 | Trocar opções de poder | X, Y | botões de cima/esquerda | □, △ | R |
 | Pausa | + / − | + ou − | Start | Esc |
 | Overlay de desempenho | clique do analógico | clique do analógico | Select | F3 |
+| Sinais (online) | — | — | — | Q / E / X / C |
 
 No menu, esquerda/direita troca o personagem; no co-op, cada jogador entra com A e sai com B.
 
@@ -113,15 +119,22 @@ mostrar a saída) tem opções para testar sem controle e sem tela:
 ./arcana_desktop --open-shop --profile teste.ini           # abre direto no Grimório com outro save
 ./arcana_desktop --audio-demo demo.wav                     # grava todos os sons e músicas num WAV
 ./arcana_desktop --bench 60                                # benchmark headless
+./arcana_desktop --server ws://localhost:8081              # online contra um servidor local do meu-game
+./arcana_desktop --online-bot create --server ws://host:8081 --insecure-ws --frames 1800  # bot online headless
 ```
 
 Nos modos com bot, benchmark ou screenshot o save real nunca é tocado. No PSP, um `autoplay.txt` em
 `ms0:/data/arcana-survivors/` liga o bot com o overlay (escreva `charged` dentro para especiais
 contínuos).
 
+O servidor padrão é `wss://vps65228.publiccloud.com.br/ws`; `pref.server=` no `profile.ini` troca o
+padrão e `--server` tem prioridade. Sem TLS (`ws://`) só para `localhost`, ou com `--insecure-ws`.
+
 Testes (`ctest`): `core` (regras da simulação), `native_hotpath` (zero alocações por frame depois do
-aquecimento), `frontend` (seleção de personagem, trigonometria visual) e `meta` (save, loja, bônus,
-depósito de moedas e redistribuição).
+aquecimento), `frontend` (seleção de personagem, trigonometria visual), `meta` (save, loja, bônus,
+depósito de moedas e redistribuição) e `online_*` (protocolo contra fixtures geradas pelo meu-game,
+mensagens, interpolação/predição, sessão/reconexão, entrada de texto, telas online); o alvo
+`online-e2e` do `build-all.sh` roda o teste ponta a ponta com o servidor de verdade.
 
 ## Arquitetura
 
@@ -130,6 +143,8 @@ include/arcana/        API do core: estado, entidades, dados; real.hpp (double, 
 include/arcana/native/ StaticVector, fixed step, spatial grid, render queue (sem heap por frame)
 src/                   simulação (game.cpp), dados das fases/poderes (data.cpp), save (profile.cpp)
 platforms/sdl/         frontend compartilhado: renderer em lote, animações, mundo, HUD, menus, áudio
+platforms/net/         rede online sem SDL: transporte, protocolo, sessão
+platforms/online/      telas online, só PC
 platforms/desktop/     main do PC (SDL2)
 platforms/switch/sdl/  main do Switch (libnx + SDL2)
 platforms/vita/sdl/    main do Vita (VitaSDK + SDL2/GXM)

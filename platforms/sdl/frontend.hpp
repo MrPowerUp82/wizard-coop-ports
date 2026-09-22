@@ -11,6 +11,8 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <string>
 
 namespace arcana::sdl {
@@ -20,6 +22,8 @@ namespace arcana::sdl {
 enum Action : std::uint32_t {
   ActSpecial = 1u << 0, ActDash = 1u << 1, ActPause = 1u << 2, ActConfirm = 1u << 3, ActCancel = 1u << 4,
   ActAlt = 1u << 5, ActUp = 1u << 6, ActDown = 1u << 7, ActLeft = 1u << 8, ActRight = 1u << 9, ActDebug = 1u << 10,
+  // Online signals to allies (PC keyboard Q/E/X/C; gamepads use Alt + direction instead).
+  ActSignalHere = 1u << 11, ActSignalHelp = 1u << 12, ActSignalDanger = 1u << 13, ActSignalLook = 1u << 14,
 };
 
 struct PadInput {
@@ -28,8 +32,44 @@ struct PadInput {
   std::uint32_t held{};  // Action bits
 };
 
+// Text typed this frame (PC keyboard, only while the frontend asks for text). Consoles leave it empty.
+struct TextInput {
+  std::string typed;  // UTF-8
+  int backspaces{};
+  bool submit{};      // Enter
+};
+
 struct InputFrame {
   std::array<PadInput, cfg::MAX_PLAYERS> pads{};
+  TextInput text;
+};
+
+// Online co-op, implemented on PC by platforms/online (IXWebSocket). The frontend only talks to this
+// interface, so the console builds compile without any networking code.
+class OnlinePort {
+public:
+  enum class MenuResult { Stay, Title, Play };
+  virtual ~OnlinePort() = default;
+  // Online pages (room list, create, name/code entry, lobby) before a match.
+  virtual void openMenu(const Profile& profile) = 0;
+  // `pressed`/`held`: player 1's Action bits (sticks already folded into directions).
+  virtual MenuResult updateMenu(std::uint32_t pressed, std::uint32_t held, const TextInput& text, Profile& profile) = 0;
+  virtual void renderMenu(BatchRenderer& b, float width, float height, float scale) = 0;
+  [[nodiscard]] virtual bool wantsText() const = 0;
+  // In a match: pumps the connection and writes the view to draw. False until the first snapshot.
+  virtual bool frame(double dt, Vec2 input, GameState& out) = 0;
+  [[nodiscard]] virtual const std::string& localId() const = 0;
+  [[nodiscard]] virtual bool reconnecting() const = 0;
+  // The connection is gone for good (the online pages show why).
+  [[nodiscard]] virtual bool closed() const = 0;
+  virtual std::optional<std::string> takeNotice() = 0;
+  virtual void choosePower(const std::string& id) = 0;
+  virtual void reroll() = 0;
+  virtual void special() = 0;
+  virtual void dash(Vec2 direction) = 0;
+  virtual void signal(const char* kind, std::optional<Vec2> at) = 0;
+  // Back to the online pages (after a match, or when the player leaves the room).
+  virtual void leave() = 0;
 };
 
 // Button names in the on-screen hints. Each platform main sets its own; the desktop switches
@@ -53,6 +93,7 @@ struct FrontendOptions {
   bool debugCharge{};   // autoplay: specials always charged (effects soak test)
   bool splash{true};    // developer seal before the title (never with autoplay/startImmediately/openShop)
   bool openCredits{};   // dev/screenshots: start on the credits screen
+  bool startOnline{};   // open the online pages right away (--online-bot)
   ButtonLabels buttons{};
 };
 
@@ -76,13 +117,23 @@ public:
   [[nodiscard]] const Profile& profile() const { return profile_; }
   [[nodiscard]] const GameState& state() const { return state_; }
   GameState& stateForTests() { return state_; }
+  // The most recent feedback.js-style announcement/toast banner text (empty if none yet). Lets
+  // tests observe observeEvents()'s event-id watermark without a fake Audio (Audio has no
+  // virtual interface to intercept sfx() calls).
+  [[nodiscard]] const std::string& announceTextForTests() const { return announce_.text; }
+  [[nodiscard]] const std::string& toastTextForTests() const { return toast_.text; }
   [[nodiscard]] bool inGame() const { return screen_ == Screen::Playing || screen_ == Screen::Paused; }
   [[nodiscard]] bool onTitle() const { return screen_ == Screen::Title; }
   [[nodiscard]] double buildMs() const { return buildMs_; }
 
+  // PC only: enables "Jogar online" on the title screen.
+  void setOnline(std::unique_ptr<OnlinePort> online);
+  // The platform should deliver keyboard text (SDL_StartTextInput) while this is true.
+  [[nodiscard]] bool wantsTextInput() const;
+
 private:
-  enum class Screen { Splash, Title, Credits, Playing, Paused, Over, Shop };
-  enum class TitleItem : std::uint8_t { Play, Campaign, Weapon, Special, Shop, Credits, Quit };
+  enum class Screen { Splash, Title, Credits, Playing, Paused, Over, Shop, Online };
+  enum class TitleItem : std::uint8_t { Play, Online, Campaign, Weapon, Special, Shop, Credits, Quit };
 
   struct PadEdges { std::uint32_t pressed{}, held{}; };
 
@@ -96,7 +147,7 @@ private:
   float uiScale(float height) const { return height / 720.0f * (options_.compact ? 1.7f : 1.0f); }
   void updateShop();
   void renderShop(BatchRenderer& batch, float width, float height);
-  native::StaticVector<TitleItem, 7> titleItems() const;
+  native::StaticVector<TitleItem, 8> titleItems() const;
   bool unlocked(const char* id) const;
   void depositRun();
   void saveProfileNow();
@@ -128,6 +179,17 @@ private:
   void renderPause(BatchRenderer& batch, float width, float height);
   void renderOver(BatchRenderer& batch, float width, float height);
   void renderPerf(BatchRenderer& batch, float width, float height);
+
+  void resetRunView();
+  void enterOnline();
+  void updateOnlineMenu(const InputFrame& input);
+  void startOnlineRun();
+  void updateOnlinePlaying(double frameSeconds, const InputFrame& input);
+  void updateOnlineChooser(const Player& me);
+  void sendSignals(const Player& me);
+  void leaveOnlineMatch();
+  void renderOnlineOverlay(BatchRenderer& batch, float width, float height);
+  native::StaticVector<const Player*, cfg::MAX_PLAYERS> hudPlayers() const;
 
   FrontendOptions options_;
   Screen screen_{Screen::Title};
@@ -169,6 +231,13 @@ private:
   BatchRenderer::Stats lastBatch_{};
   double fpsAccum_{}; int fpsFrames_{}; double fps_{};
   char scratch_[160]{};
+
+  std::unique_ptr<OnlinePort> online_;
+  bool onlineMatch_{}, onlineMenuOpen_{};
+  std::string sentChoiceKey_;
+  // Player id behind each local slot: "p1".."p4" offline; online only slot 0 (the server's id).
+  std::array<std::string, cfg::MAX_PLAYERS> localIds_{"p1", "p2", "p3", "p4"};
 };
 
 } // namespace arcana::sdl
+

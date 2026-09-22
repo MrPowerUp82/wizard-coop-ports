@@ -4,6 +4,11 @@
 #include "batch_renderer.hpp"
 #include "frontend.hpp"
 
+#if ARCANA_HAS_ONLINE
+#include "online_menu.hpp"
+#include "ws_transport.hpp"
+#endif
+
 #include <SDL.h>
 #include <SDL_image.h>
 #include <SDL_ttf.h>
@@ -43,6 +48,10 @@ struct Args {
   std::string profile;    // save file; default: the OS per-user data folder
   std::string audioDemo;  // render every sound and music mood to a WAV file and exit
   int shotsEvery{};       // headless: also save <screenshot>-NNNN.png every N frames
+  std::string server;     // online server URL (default: the public one; overrides pref.server)
+  bool insecureWs{};      // allow plain ws:// to a remote host (tests)
+  std::string onlineBot;  // headless online bot: "create" or "join"
+  int botPlayers{2};      // --online-bot create: start once this many joined
 };
 
 Args parseArgs(int argc, char** argv) {
@@ -70,6 +79,10 @@ Args parseArgs(int argc, char** argv) {
     else if (k == "--screenshot") a.screenshot = next("screenshot.bmp");
     else if (k == "--frames") a.frames = std::atoi(next("600").c_str());
     else if (k == "--bench") a.benchSeconds = std::atof(next("60").c_str());
+    else if (k == "--server") a.server = next("");
+    else if (k == "--insecure-ws") a.insecureWs = true;
+    else if (k == "--online-bot") a.onlineBot = next("create");
+    else if (k == "--bot-players") a.botPlayers = std::atoi(next("2").c_str());
     else if (k == "--size") { a.width = std::atoi(next("1280").c_str()); a.height = std::atoi(next("720").c_str()); }
   }
   return a;
@@ -106,25 +119,36 @@ void deadzone(float& x, float& y) {
   x *= scale; y *= scale;
 }
 
-void readInput(InputFrame& frame, const std::vector<SDL_GameController*>& pads) {
+void readInput(InputFrame& frame, const std::vector<SDL_GameController*>& pads, bool textMode) {
   frame = {};
   const Uint8* k = SDL_GetKeyboardState(nullptr);
   auto& p0 = frame.pads[0];
   p0.connected = true;
-  p0.x = static_cast<float>((k[SDL_SCANCODE_D] || k[SDL_SCANCODE_RIGHT]) - (k[SDL_SCANCODE_A] || k[SDL_SCANCODE_LEFT]));
-  p0.y = static_cast<float>((k[SDL_SCANCODE_S] || k[SDL_SCANCODE_DOWN]) - (k[SDL_SCANCODE_W] || k[SDL_SCANCODE_UP]));
-  if (p0.x != 0 && p0.y != 0) { p0.x *= 0.7071f; p0.y *= 0.7071f; }
-  if (k[SDL_SCANCODE_SPACE]) p0.held |= ActSpecial;
-  if (k[SDL_SCANCODE_LSHIFT] || k[SDL_SCANCODE_RSHIFT]) p0.held |= ActDash;
-  if (k[SDL_SCANCODE_ESCAPE]) p0.held |= ActPause;
-  if (k[SDL_SCANCODE_RETURN] || k[SDL_SCANCODE_SPACE]) p0.held |= ActConfirm;
-  if (k[SDL_SCANCODE_BACKSPACE]) p0.held |= ActCancel;
-  if (k[SDL_SCANCODE_R]) p0.held |= ActAlt;
-  if (k[SDL_SCANCODE_F3]) p0.held |= ActDebug;
-  if (k[SDL_SCANCODE_UP] || k[SDL_SCANCODE_W]) p0.held |= ActUp;
-  if (k[SDL_SCANCODE_DOWN] || k[SDL_SCANCODE_S]) p0.held |= ActDown;
-  if (k[SDL_SCANCODE_LEFT] || k[SDL_SCANCODE_A]) p0.held |= ActLeft;
-  if (k[SDL_SCANCODE_RIGHT] || k[SDL_SCANCODE_D]) p0.held |= ActRight;
+  if (textMode) {
+    // Typing a name or room code: letters are text, so the keyboard only backs out (Enter and
+    // Backspace arrive as events, see the main loop). Gamepads keep driving the on-screen grid.
+    if (k[SDL_SCANCODE_ESCAPE]) p0.held |= ActCancel;
+  } else {
+    p0.x = static_cast<float>((k[SDL_SCANCODE_D] || k[SDL_SCANCODE_RIGHT]) - (k[SDL_SCANCODE_A] || k[SDL_SCANCODE_LEFT]));
+    p0.y = static_cast<float>((k[SDL_SCANCODE_S] || k[SDL_SCANCODE_DOWN]) - (k[SDL_SCANCODE_W] || k[SDL_SCANCODE_UP]));
+    if (p0.x != 0 && p0.y != 0) { p0.x *= 0.7071f; p0.y *= 0.7071f; }
+    if (k[SDL_SCANCODE_SPACE]) p0.held |= ActSpecial;
+    if (k[SDL_SCANCODE_LSHIFT] || k[SDL_SCANCODE_RSHIFT]) p0.held |= ActDash;
+    if (k[SDL_SCANCODE_ESCAPE]) p0.held |= ActPause;
+    if (k[SDL_SCANCODE_RETURN] || k[SDL_SCANCODE_SPACE]) p0.held |= ActConfirm;
+    if (k[SDL_SCANCODE_BACKSPACE]) p0.held |= ActCancel;
+    if (k[SDL_SCANCODE_R]) p0.held |= ActAlt;
+    if (k[SDL_SCANCODE_F3]) p0.held |= ActDebug;
+    if (k[SDL_SCANCODE_UP] || k[SDL_SCANCODE_W]) p0.held |= ActUp;
+    if (k[SDL_SCANCODE_DOWN] || k[SDL_SCANCODE_S]) p0.held |= ActDown;
+    if (k[SDL_SCANCODE_LEFT] || k[SDL_SCANCODE_A]) p0.held |= ActLeft;
+    if (k[SDL_SCANCODE_RIGHT] || k[SDL_SCANCODE_D]) p0.held |= ActRight;
+    // Online signals (src/main.js SIGNAL_KEYS, plus C for "look there").
+    if (k[SDL_SCANCODE_Q]) p0.held |= ActSignalHere;
+    if (k[SDL_SCANCODE_E]) p0.held |= ActSignalHelp;
+    if (k[SDL_SCANCODE_X]) p0.held |= ActSignalDanger;
+    if (k[SDL_SCANCODE_C]) p0.held |= ActSignalLook;
+  }
 
   // First gamepad shares slot 0 with the keyboard; the others become players 2-4.
   for (std::size_t i = 0; i < pads.size() && i < frame.pads.size(); ++i) {
@@ -252,6 +276,7 @@ int main(int argc, char** argv) {
 
   FrontendOptions options = args.frontend;
   if (args.benchSeconds > 0) { options.autoplay = true; options.showPerf = true; }
+  if (!args.onlineBot.empty()) { options.autoplay = true; options.startOnline = true; }
   auto frontend = std::make_unique<Frontend>(options); // GameState is large: keep it off the stack
   // Benchmarks, screenshots and bots never touch the player's real save.
   if (!args.profile.empty()) frontend->setProfilePath(args.profile);
@@ -269,6 +294,20 @@ int main(int argc, char** argv) {
   bool keyboardHints = true;
   frontend->setButtons(kKeyboardButtons);
 
+#if ARCANA_HAS_ONLINE
+  {
+    online::OnlineMenuConfig oc;
+    if (!args.server.empty()) { oc.url = args.server; oc.forceUrl = true; }
+    oc.allowInsecure = args.insecureWs;
+    oc.bot = args.onlineBot;
+    oc.botPlayers = args.botPlayers;
+    const std::string ca = findAsset("", {"cacert.pem"});
+    if (ca.empty()) std::fprintf(stderr, "cacert.pem não encontrado: usando os certificados do sistema\n");
+    oc.transport = [ca] { return std::make_unique<online::WsTransport>(ca); };
+    frontend->setOnline(std::make_unique<online::OnlineMenu>(std::move(oc)));
+  }
+#endif
+
   std::vector<SDL_GameController*> pads;
   InputFrame input;
   using Clock = std::chrono::steady_clock;
@@ -278,7 +317,12 @@ int main(int argc, char** argv) {
   int frames = 0;
   bool running = true;
 
+  SDL_StopTextInput(); // SDL starts with text input on; only the name/room-code pages want it
+  TextInput typed;
   while (running) {
+    const bool textMode = frontend->wantsTextInput();
+    if (textMode != (SDL_IsTextInputActive() == SDL_TRUE)) textMode ? SDL_StartTextInput() : SDL_StopTextInput();
+    typed = {};
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_QUIT) running = false;
@@ -293,13 +337,22 @@ int main(int argc, char** argv) {
           SDL_GameControllerClose(c); return true;
         }), pads.end());
       }
+      if (textMode && e.type == SDL_TEXTINPUT) typed.typed += e.text.text;
+      if (textMode && e.type == SDL_KEYDOWN) {
+        if (e.key.keysym.sym == SDLK_BACKSPACE) ++typed.backspaces;
+        if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_KP_ENTER) typed.submit = true;
+        if (e.key.keysym.sym == SDLK_v && (e.key.keysym.mod & KMOD_CTRL)) {
+          if (char* clip = SDL_GetClipboardText()) { typed.typed += clip; SDL_free(clip); }
+        }
+      }
     }
-    readInput(input, pads);
+    readInput(input, pads, textMode);
+    input.text = typed;
 
     const auto frameStart = Clock::now();
     double dt = std::chrono::duration<double>(frameStart - last).count();
     last = frameStart;
-    if (headless) dt = 1.0 / 60.0; // deterministic pacing for screenshots/benchmarks
+    if (headless && args.onlineBot.empty()) dt = 1.0 / 60.0; // deterministic pacing for screenshots/benchmarks
 
     if (!frontend->update(dt, input)) running = false;
     int w = args.width, h = args.height;
@@ -335,8 +388,11 @@ int main(int argc, char** argv) {
       running = false;
     }
     SDL_RenderPresent(renderer);
+    if (headless && !args.onlineBot.empty()) SDL_Delay(16); // online bots play in real time
   }
 
+  if (!args.onlineBot.empty())
+    std::printf("online_players=%d online_time=%.1f\n", static_cast<int>(frontend->state().players.size()), frontend->state().time);
   if (frames > 60) {
     const auto& s = frontend->state();
     std::printf("frames=%d avg_cpu_frame=%.3fms worst=%.3fms avg_queue=%.3fms game_time=%.1fs phase=%d enemies=%d over=%d\n",
