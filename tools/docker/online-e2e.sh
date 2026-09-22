@@ -22,23 +22,47 @@ trap cleanup EXIT
 cleanup
 docker network create "$NET" >/dev/null
 docker run -d --name arcana-e2e-server --network "$NET" -v "$GAME_MOUNT":/game -w /game -e PORT=8081 node:22-slim node server/server.js >/dev/null
-sleep 2
+
+# Bounded readiness wait: poll the server container's log for its "listening on" line instead of
+# guessing a fixed sleep.
+READY=0
+for _ in $(seq 1 30); do
+  if docker logs arcana-e2e-server 2>&1 | grep -q "listening on"; then
+    READY=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$READY" -ne 1 ]]; then
+  echo "online-e2e: FALHOU (servidor não ficou pronto em 30s)"
+  docker logs arcana-e2e-server | tail -20
+  exit 1
+fi
 
 bot() {
-  docker run --rm --network "$NET" -v "$MOUNT":/src -w /src -e SDL_AUDIODRIVER=dummy arcana-host \
+  timeout 180s docker run --rm --network "$NET" -v "$MOUNT":/src -w /src -e SDL_AUDIODRIVER=dummy arcana-host \
     build-linux/arcana_desktop --online-bot "$1" --bot-players 2 --server ws://arcana-e2e-server:8081 --insecure-ws --frames 1800 --mute
 }
 bot create > build-linux/e2e-host.log 2>&1 &
 HOST=$!
 sleep 4
-bot join > build-linux/e2e-guest.log 2>&1
-wait "$HOST"
+guest_status=0
+bot join > build-linux/e2e-guest.log 2>&1 || guest_status=$?
+host_status=0
+wait "$HOST" || host_status=$?
 
 grep -h online_players build-linux/e2e-host.log build-linux/e2e-guest.log || true
-if grep -q "online_players=2" build-linux/e2e-host.log && grep -q "online_players=2" build-linux/e2e-guest.log; then
+if [[ "$host_status" -eq 0 && "$guest_status" -eq 0 ]] \
+   && grep -q "online_players=2" build-linux/e2e-host.log \
+   && grep -q "online_players=2" build-linux/e2e-guest.log; then
   echo "online-e2e: ok"
 else
-  echo "online-e2e: FALHOU (logs em build-linux/e2e-*.log)"
+  echo "online-e2e: FALHOU (host_status=$host_status guest_status=$guest_status, logs em build-linux/e2e-*.log)"
+  echo "--- e2e-host.log ---"
+  tail -20 build-linux/e2e-host.log || true
+  echo "--- e2e-guest.log ---"
+  tail -20 build-linux/e2e-guest.log || true
+  echo "--- server log ---"
   docker logs arcana-e2e-server | tail -20
   exit 1
 fi

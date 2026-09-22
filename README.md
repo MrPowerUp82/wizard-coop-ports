@@ -127,7 +127,7 @@ Nos modos com bot, benchmark ou screenshot o save real nunca é tocado. No PSP, 
 `ms0:/data/arcana-survivors/` liga o bot com o overlay (escreva `charged` dentro para especiais
 contínuos).
 
-O servidor padrão é `wss://vps65228.publiccloud.com.br/ws`; `server=` no `profile.ini` troca o
+O servidor padrão é `wss://vps65228.publiccloud.com.br/ws`; `pref.server=` no `profile.ini` troca o
 padrão e `--server` tem prioridade. Sem TLS (`ws://`) só para `localhost`, ou com `--insecure-ws`.
 
 Testes (`ctest`): `core` (regras da simulação), `native_hotpath` (zero alocações por frame depois do
