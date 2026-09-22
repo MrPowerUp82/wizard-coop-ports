@@ -120,7 +120,7 @@ constexpr const char* kDeveloper = "MrPowerUp82";
 constexpr double kSplashSeconds = 2.4;
 
 std::uint8_t alpha8(float a) { return static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255); }
-float ramp(double t, double from, double to) { return static_cast<float>(std::clamp((t - from) / (to - from), 0.0, 1.0)); }
+float ramp(double t, double from, double to) { return std::clamp(static_cast<float>((t - from) / (to - from)), 0.0f, 1.0f); }
 
 // The MrPowerUp82 seal: rune circle, inscribed triangle, crescent over the axis and a four-point
 // star. Drawn from primitives (no texture), so it stays crisp from the PSP's 480x272 up to 4K.
