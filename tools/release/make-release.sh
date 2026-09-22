@@ -35,6 +35,8 @@ mkdir -p "$STAGE/$NAME-linux-x86_64/assets/fonts"
 cp dist/linux/arcana_desktop "$STAGE/$NAME-linux-x86_64/"
 cp assets/native_atlas_128.png assets/terrain_tiles.png "$STAGE/$NAME-linux-x86_64/assets/"
 cp assets/fonts/* "$STAGE/$NAME-linux-x86_64/assets/fonts/"
+cp assets/cacert.pem "$STAGE/$NAME-linux-x86_64/assets/"
+cp THIRD_PARTY_NOTICES.txt "$STAGE/$NAME-linux-x86_64/"
 tar -C "$STAGE" --owner=0 --group=0 --mtime="@$(git log -1 --format=%ct)" -czf "$OUT/$NAME-linux-x86_64.tar.gz" "$NAME-linux-x86_64"
 rm -rf "$STAGE"
 # Windows bundle: exe + SDL2 DLLs + assets/, zipped inside the windows image with fixed timestamps.

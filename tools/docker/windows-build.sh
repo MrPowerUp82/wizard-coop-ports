@@ -20,6 +20,7 @@ cp /opt/sdl-win64/bin/SDL2.dll /opt/sdl-win64/bin/SDL2_image.dll /opt/sdl-win64/
 cp assets/native_atlas_128.png assets/terrain_tiles.png "$BUNDLE/assets/"
 cp assets/fonts/* "$BUNDLE/assets/fonts/"
 cp assets/cacert.pem "$BUNDLE/assets/"
+cp THIRD_PARTY_NOTICES.txt "$BUNDLE/"
 x86_64-w64-mingw32-strip --strip-unneeded "$BUNDLE/arcana-survivors.exe"
 
 # Anything besides Windows' own DLLs and the SDL2 ones next to the .exe would fail on a clean machine.
