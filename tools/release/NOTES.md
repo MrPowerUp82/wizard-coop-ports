@@ -1,6 +1,10 @@
 Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch**, **PS Vita** e **PSP**, com builds para Windows e Linux. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
 
-## Novidades da v0.6.1
+## Novidades da v0.6.2
+
+- **Dicas de controle corretas em cada plataforma:** antes as dicas da tela mostravam sempre A/B/X/Y. No PC (Windows/Linux) elas agora acompanham o dispositivo usado por último: no teclado aparecem Enter, Backspace e R, e ao usar um controle voltam para A/B/X/Y. No PS Vita e no PSP aparecem X, O e Quadrado. Vale para o menu, a escolha de poderes, o Grimório, a tela de fim de partida e os Créditos.
+
+## Da v0.6.1
 
 - **Abertura com o selo MrPowerUp82:** um selo arcano (círculo de runas, triângulo, crescente e estrela) se desenha na tela antes do menu, com "MrPowerUp82 apresenta". Dura cerca de 2 segundos e qualquer botão pula. O selo é desenhado pelo próprio renderer, sem textura nova, então fica nítido do PSP (480×272) ao 4K.
 - **Tela de Créditos:** novo item no menu principal, com autoria, plataformas, fonte e licença.
