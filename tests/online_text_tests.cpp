@@ -7,6 +7,19 @@
 
 using namespace arcana::online;
 
+namespace {
+// Walks the cursor to a labelled key: down to the bottom row (DEL and OK live there), then right.
+// move(1, 0) wraps inside a row, so the search is bounded and fails loudly instead of spinning.
+void seek(TextEntry& entry, const char* label) {
+  entry.move(0, entry.keyCount());
+  for (int step = 0; step <= TextEntry::kColumns; ++step) {
+    if (entry.keyLabel(entry.cursor()) == label) return;
+    entry.move(1, 0);
+  }
+  assert(false && "key not reachable on the bottom row");
+}
+} // namespace
+
 int main() {
   // Room codes: upper-cased, only the server's alphabet (no I, O, 0, 1), exactly 6 characters.
   {
@@ -28,11 +41,11 @@ int main() {
     assert(code.cursor() == TextEntry::kColumns - 1);
     code.move(0, 5);                                   // clamps to the last row
     assert(code.cursor() >= 30);
-    while (code.keyLabel(code.cursor()) != "DEL") code.move(1, 0);
+    seek(code, "DEL");
     code.press();
     assert(code.value() == "A");
     code.type("BC234");
-    while (code.keyLabel(code.cursor()) != "OK") code.move(1, 0);
+    seek(code, "OK");
     code.press();
     assert(code.takeSubmit() && !code.takeSubmit());
   }
@@ -48,7 +61,7 @@ int main() {
     assert(name.value() == "Ana L12345678901");
     TextEntry blank(TextKind::Name, "   ");
     assert(!blank.valid());
-    while (blank.keyLabel(blank.cursor()) != "OK") blank.move(1, 0); // OK on an invalid value does not submit
+    seek(blank, "OK"); // OK on an invalid value does not submit
     blank.press();
     assert(!blank.takeSubmit());
     assert(TextEntry(TextKind::Name).keyLabel(62) == "ESP");
