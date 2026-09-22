@@ -4,6 +4,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -172,11 +173,23 @@ void compareCase(const json& c) {
   for (std::size_t i = 0; i < events.size(); ++i) {
     const Event& g = state->events[i];
     const json& e = events[i];
-    near(static_cast<double>(g.id), num(e, "id"), "event.id"); same(g.kind, str(e, "kind"), "event.kind");
-    near(g.x, num(e, "x"), "event.x"); near(g.y, num(e, "y"), "event.y");
-    same(g.player, str(e, "player"), "event.player");
-    if (g.kind == "signal") same(g.text, str(e, "signal"), "event.signal");
-    if (e.contains("points")) near(g.points.size(), e["points"].size(), "event.points");
+    const std::string at = "event " + std::to_string(i) + " ";
+    near(static_cast<double>(g.id), num(e, "id"), at + "id"); same(g.kind, str(e, "kind"), at + "kind");
+    near(g.x, num(e, "x"), at + "x"); near(g.y, num(e, "y"), at + "y");
+    near(g.color, num(e, "color"), at + "color"); near(g.r, num(e, "r"), at + "r"); near(g.stage, num(e, "stage"), at + "stage");
+    same(g.player, str(e, "player"), at + "player");
+    same(g.name, sanitizeName(str(e, "name")), at + "name");
+    near(g.variant, std::max({num(e, "variant"), num(e, "team"), num(e, "evolved")}), at + "variant");
+    std::string expectedText;
+    for (const char* key : {"reaction", "signal", "type", "encounter"})
+      if (std::string t = str(e, key); !t.empty()) { expectedText = std::move(t); break; }
+    same(g.text, expectedText, at + "text");
+    if (e.contains("points")) {
+      const json& pts = e["points"];
+      near(g.points.size(), pts.size(), at + "points size");
+      for (std::size_t k = 0; k < g.points.size() && k < pts.size(); ++k)
+        near(g.points[k], pts[k].get<double>(), at + "points[" + std::to_string(k) + "]");
+    }
   }
 }
 } // namespace
@@ -221,6 +234,9 @@ int main() {
   assert(sanitizeName("Ana\x01L\xC3\xBA") == "AnaL\xC3\xBA");
   assert(sanitizeName("abcdefghijklmnopqrstu") == "abcdefghijklmnop");
   assert(sanitizeName(std::string(20, 'a') + "\xC3").size() == 16);
+  assert(sanitizeName("A\xC2\x85" "B") == "AB");        // C1 control (U+0085)
+  assert(sanitizeName("A\xE2\x80\xAE" "RB") == "ARB");  // RTL override (U+202E)
+  assert(sanitizeName("A\x80""B") == "AB");          // stray UTF-8 continuation byte
   std::puts("online_protocol: ok");
   return 0;
 }

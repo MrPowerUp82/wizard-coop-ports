@@ -70,7 +70,9 @@ Player decodePlayer(const json& row) {
   p.reviveBy = str(row, 16); p.reviving = str(row, 17);
   p.castCount = static_cast<int>(num(row, 18)); p.castAngle = num(row, 19); p.invulnerableFor = num(row, 20);
   p.orbitAngle = num(row, 21); p.rerolls = static_cast<int>(num(row, 22)); p.phoenix = static_cast<int>(num(row, 23));
-  p.inputSeq = id(num(row, 24)); p.powerTimer = num(row, 25); p.connected = row.size() > 26 ? flag(row, 26) : true;
+  p.inputSeq = id(num(row, 24)); p.powerTimer = num(row, 25);
+  // Missing field 26 means an older/short row (e.g. pre-"connected" wire format); default such players to connected.
+  p.connected = row.size() > 26 ? flag(row, 26) : true;
   p.dashFor = num(row, 27); p.dashCooldown = num(row, 28); p.dashX = num(row, 29); p.dashY = num(row, 30);
   p.moveX = num(row, 31); p.moveY = num(row, 32); p.specialCooldown = num(row, 33); p.motionId = id(num(row, 34));
   if (row.size() > 35 && row[35].is_object()) {
@@ -202,15 +204,42 @@ bool decodeSnapshot(const json& compact, GameState& out, DecodeStats* stats) {
   }
 }
 
+namespace {
+// C0/DEL/C1 controls, zero-width & bidi format characters (direction override/isolate marks that
+// can be used to disguise names), and the BOM. Everything else, including accented/multi-byte
+// printable text, is kept byte-for-byte.
+bool isBannedCodepoint(std::uint32_t cp) {
+  return cp <= 0x1F || cp == 0x7F || (cp >= 0x80 && cp <= 0x9F) ||
+         (cp >= 0x200B && cp <= 0x200F) || (cp >= 0x2028 && cp <= 0x202E) ||
+         (cp >= 0x2066 && cp <= 0x2069) || cp == 0xFEFF;
+}
+} // namespace
+
 std::string sanitizeName(std::string_view in) {
   std::string out;
   int codepoints = 0;
-  for (std::size_t i = 0; i < in.size() && codepoints < 16;) {
+  std::size_t i = 0;
+  while (i < in.size() && codepoints < 16) {
     const auto lead = static_cast<unsigned char>(in[i]);
-    const std::size_t len = lead < 0x80 ? 1 : (lead & 0xE0) == 0xC0 ? 2 : (lead & 0xF0) == 0xE0 ? 3 : (lead & 0xF8) == 0xF0 ? 4 : 1;
-    if (i + len > in.size()) break; // cut in the middle of a character
-    if (!(len == 1 && (lead < 0x20 || lead == 0x7F))) { out.append(in.substr(i, len)); ++codepoints; }
-    i += len;
+    std::size_t len;
+    std::uint32_t cp;
+    if (lead < 0x80) { len = 1; cp = lead; }
+    else if ((lead & 0xE0) == 0xC0) { len = 2; cp = lead & 0x1F; }
+    else if ((lead & 0xF0) == 0xE0) { len = 3; cp = lead & 0x0F; }
+    else if ((lead & 0xF8) == 0xF0) { len = 4; cp = lead & 0x07; }
+    else { ++i; continue; } // stray continuation byte or invalid lead byte: drop it and resync
+
+    if (i + len > in.size()) { ++i; continue; } // truncated sequence: drop the lead byte and resync
+    bool validContinuations = true;
+    for (std::size_t k = 1; k < len; ++k) {
+      const auto b = static_cast<unsigned char>(in[i + k]);
+      if ((b & 0xC0) != 0x80) { validContinuations = false; break; }
+      cp = (cp << 6) | (b & 0x3F);
+    }
+    if (!validContinuations) { ++i; continue; } // malformed sequence: drop the lead byte and resync
+
+    if (!isBannedCodepoint(cp)) { out.append(in.substr(i, len)); ++codepoints; }
+    i += len; // dropped characters (banned or malformed) never count toward the 16-codepoint limit
   }
   return out;
 }
