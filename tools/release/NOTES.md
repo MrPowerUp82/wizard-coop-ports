@@ -1,6 +1,13 @@
 Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch**, **PS Vita** e **PSP**, com builds para Windows e Linux. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
 
-## Novidades da v0.6.0
+## Novidades da v0.6.1
+
+- **Abertura com o selo MrPowerUp82:** um selo arcano (círculo de runas, triângulo, crescente e estrela) se desenha na tela antes do menu, com "MrPowerUp82 apresenta". Dura cerca de 2 segundos e qualquer botão pula. O selo é desenhado pelo próprio renderer, sem textura nova, então fica nítido do PSP (480×272) ao 4K.
+- **Tela de Créditos:** novo item no menu principal, com autoria, plataformas, fonte e licença.
+- **Assinatura no menu:** "Desenvolvido por MrPowerUp82 · 2026", discreta no canto da tela.
+- O menu principal se ajusta quando todos os desbloqueios aparecem (até 7 itens), sem invadir os cards dos jogadores nem a borda da tela do PSP.
+
+## Da v0.6.0
 
 - **PSP:** port completo em ISO/CSO (um arquivo só) ou pasta com EBOOT. A simulação roda em `float`, porque o PSP não tem `double` em hardware; 200 partidas de bot comparadas com a versão `double` dão o mesmo resultado dentro do ruído. Interface refeita para 480×272 (single-player), texturas numa página de 512×512 e áudio sintetizado a 22 kHz. No PPSSPP roda a 60 fps com 90+ inimigos. Ainda não foi medido em hardware real.
 - **Grimório (meta-progressão):** as moedas de cada partida ficam guardadas e compram os 15 upgrades permanentes do jogo web, entre eles Vigor, Potência, Canalização, Fênix, Pacto familiar e os desbloqueios Arsenal, Segundo feitiço e Ritual infinito. Também dá para redistribuir tudo e receber as moedas de volta.
