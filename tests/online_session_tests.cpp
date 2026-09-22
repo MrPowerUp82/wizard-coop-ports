@@ -208,6 +208,16 @@ int main() {
     error(*net.wires[2]);
     list.update(5050);
     assert(list.error() == "Não foi possível alcançar o servidor.");
+    // refresh() used to silently no-op while a request was already in flight. It must instead
+    // cancel the pending request and start a new one right away, so a caller that leaves and
+    // re-enters the room list page (e.g. the online menu leaving Home) doesn't leave the old
+    // connection open indefinitely.
+    list.update(10050);                                 // next scheduled fetch: opens wire[3]
+    assert(net.wires.size() == 4 && !net.wires[3]->closed);
+    list.refresh(10060);
+    assert(net.wires[3]->closed);                        // the in-flight request was cancelled
+    list.update(10060);
+    assert(net.wires.size() == 5);                       // and a new one started immediately
   }
   std::puts("online_session: ok");
   return 0;

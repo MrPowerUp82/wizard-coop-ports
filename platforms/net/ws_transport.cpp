@@ -15,6 +15,13 @@ bool looksLikeTls(std::string reason) {
     if (reason.find(word) != std::string::npos) return true;
   return false;
 }
+// permessage-deflate lets a hostile server inflate a small frame into a huge message. Real
+// snapshots are tens of KB, so cap well above that: comfortably headroom for growth, but small
+// enough to bound the damage. The vendored ixwebsocket (build-linux/_deps/ixwebsocket-src) has no
+// setMaxMessageSize()-style API on ix::WebSocket to reject this before it decompresses, so the
+// bound is enforced here instead: an oversized message is dropped and the connection is closed
+// rather than being handed to the JSON parser.
+constexpr std::size_t kMaxMessageBytes = 4 * 1024 * 1024; // 4 MB
 } // namespace
 
 struct WsTransport::Impl {
@@ -43,7 +50,16 @@ void WsTransport::open(const std::string& url) {
     TransportEvent e;
     switch (msg->type) {
       case ix::WebSocketMessageType::Open: e.type = TransportEvent::Type::Open; break;
-      case ix::WebSocketMessageType::Message: e.type = TransportEvent::Type::Message; e.text = msg->str; break;
+      case ix::WebSocketMessageType::Message:
+        if (msg->str.size() > kMaxMessageBytes) {
+          e.type = TransportEvent::Type::Error;
+          e.text = "Message exceeds maximum size";
+          impl->socket.close(); // don't keep talking to a server sending oversized frames
+        } else {
+          e.type = TransportEvent::Type::Message;
+          e.text = msg->str;
+        }
+        break;
       case ix::WebSocketMessageType::Close:
         e.type = TransportEvent::Type::Close; e.code = msg->closeInfo.code; e.text = msg->closeInfo.reason; break;
       case ix::WebSocketMessageType::Error:

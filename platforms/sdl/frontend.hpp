@@ -103,6 +103,11 @@ public:
   [[nodiscard]] const Profile& profile() const { return profile_; }
   [[nodiscard]] const GameState& state() const { return state_; }
   GameState& stateForTests() { return state_; }
+  // The most recent feedback.js-style announcement/toast banner text (empty if none yet). Lets
+  // tests observe observeEvents()'s event-id watermark without a fake Audio (Audio has no
+  // virtual interface to intercept sfx() calls).
+  [[nodiscard]] const std::string& announceTextForTests() const { return announce_.text; }
+  [[nodiscard]] const std::string& toastTextForTests() const { return toast_.text; }
   [[nodiscard]] bool inGame() const { return screen_ == Screen::Playing || screen_ == Screen::Paused; }
   [[nodiscard]] double buildMs() const { return buildMs_; }
 

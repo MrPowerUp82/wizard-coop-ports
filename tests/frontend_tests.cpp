@@ -134,6 +134,44 @@ int main() {
     hold(*f, 0);
     assert(!f->inGame() && online.count("leave") == 2);
   }
+  // Regression: resetRunView() must reset feedbackEventId_, not just feedbackPrimed_. Otherwise
+  // the watermark from one online match (event ids can be large) survives into the next one
+  // (which restarts its own ids from a low number), and observeEvents() silently skips every
+  // announcement/sound of the new match because `e.id <= feedbackEventId_`.
+  {
+    auto f = std::make_unique<Frontend>();
+    auto owned = std::make_unique<FakeOnline>();
+    FakeOnline& online = *owned;
+    f->setOnline(std::move(owned));
+    Player me = createPlayer("me", "Ana", 1);
+    online.view->players["me"] = me;
+    tap(*f, 0, ActDown);
+    tap(*f, 0, ActConfirm);
+    online.next = OnlinePort::MenuResult::Play;
+    hold(*f, 0);                                          // transition frame: Online -> Playing
+    assert(f->inGame());
+    hold(*f, 0);                                          // first Playing frame: primes the watermark on an empty event set
+    // First match: a high-id event is announced normally.
+    Event chest; chest.id = 800; chest.kind = "chest";
+    online.view->events.push_back(chest);
+    hold(*f, 0);
+    assert(f->toastTextForTests().find("Baú compartilhado") != std::string::npos);
+    online.view->events.clear();
+    // Leave the match (Esc, down to "Sair da sala", confirm).
+    tap(*f, 0, ActPause);
+    tap(*f, 0, ActDown);
+    tap(*f, 0, ActConfirm);
+    assert(!f->inGame());
+    // Second match: its view starts a fresh event stream at a low id, distinct from "chest".
+    online.next = OnlinePort::MenuResult::Play;
+    hold(*f, 0);                                          // transition frame: Online -> Playing (resetRunView() runs here)
+    assert(f->inGame());
+    hold(*f, 0);                                          // priming frame: feedbackEventId_ must be back at 0 here, not stuck at 800
+    Event boss; boss.id = 1; boss.kind = "boss";
+    online.view->events.push_back(boss);
+    hold(*f, 0);
+    assert(f->announceTextForTests().find("despertou") != std::string::npos);
+  }
   // Without an online port the title is unchanged (first item still starts a local run).
   {
     auto f = std::make_unique<Frontend>();

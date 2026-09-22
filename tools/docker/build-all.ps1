@@ -31,9 +31,10 @@ foreach ($target in $Targets) {
       docker build -q -t arcana-host -f tools/docker/host.Dockerfile tools/docker | Out-Null
       if (Invoke-Container 'arcana-host' 'tools/docker/host-build.sh') {
         New-Item -ItemType Directory -Force dist\linux\fonts | Out-Null
+        New-Item -ItemType Directory -Force dist\linux\assets | Out-Null
         Copy-Item build-linux\arcana_desktop dist\linux\ -Force
         Copy-Item assets\native_atlas_128.png, assets\terrain_tiles.png dist\linux\ -Force
-        Copy-Item assets\cacert.pem dist\linux\ -Force
+        Copy-Item assets\cacert.pem dist\linux\assets\ -Force
         Copy-Item assets\fonts\* dist\linux\fonts\ -Force
         $results[$target] = 'ok  dist\linux\arcana_desktop (testes passaram)'
       } else { $results[$target] = 'FALHOU' }

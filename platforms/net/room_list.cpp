@@ -6,6 +6,14 @@ namespace arcana::online {
 
 RoomList::RoomList(std::string url, TransportFactory factory) : url_(std::move(url)), factory_(std::move(factory)) {}
 
+void RoomList::refresh(double nowMs) {
+  if (transport_) {
+    transport_->close();
+    transport_.reset();
+  }
+  nextAt_ = nowMs;
+}
+
 void RoomList::finish(double now) {
   loaded_ = true;
   transport_->close();

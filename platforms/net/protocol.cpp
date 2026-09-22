@@ -64,8 +64,15 @@ Player decodePlayer(const json& row) {
   p.xp = num(row, 7); p.level = static_cast<int>(num(row, 8, 1)); p.alive = flag(row, 9); p.speed = num(row, 10, 190);
   if (row.size() > 11 && row[11].is_object())
     for (const auto& [power, rank] : row[11].items()) if (rank.is_number()) p.powers[power] = rank.get<int>();
-  if (row.size() > 12 && row[12].is_array())
-    for (const auto& power : row[12]) if (power.is_string()) p.pendingPowers.push_back(power.get<std::string>());
+  if (row.size() > 12 && row[12].is_array()) {
+    // pendingPowers is server-controlled with no protocol cap; the server only ever offers 3, so
+    // 8 is generous headroom while still bounding a hostile/buggy server's payload.
+    constexpr std::size_t kMaxPendingPowers = 8;
+    for (const auto& power : row[12]) {
+      if (p.pendingPowers.size() >= kMaxPendingPowers) break;
+      if (power.is_string()) p.pendingPowers.push_back(power.get<std::string>());
+    }
+  }
   p.specialCharge = num(row, 13); p.coins = static_cast<int>(num(row, 14)); p.reviveProgress = num(row, 15);
   p.reviveBy = str(row, 16); p.reviving = str(row, 17);
   p.castCount = static_cast<int>(num(row, 18)); p.castAngle = num(row, 19); p.invulnerableFor = num(row, 20);

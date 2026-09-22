@@ -54,6 +54,11 @@ int main() {
   assert(close(out->shots[0].x, 10 + 100 * 0.2));
   assert(close(out->hazards[0].warning, 0.8));
 
+  // A long stall/reconnect must not extrapolate shots for tens of seconds: `ahead` clamps to 0.5s.
+  interp.apply(snaps, 1.1 + 40.0, *out);
+  assert(close(out->shots[0].x, 10 + 100 * 0.5));
+  assert(close(out->players.at("u1").x, 10));                // positions still just hold, unaffected
+
   // Before the oldest snapshot: the oldest is shown.
   interp.apply(snaps, 0.5, *out);
   assert(close(out->enemies[0].x, 100));

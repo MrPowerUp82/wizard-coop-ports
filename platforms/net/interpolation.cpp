@@ -23,7 +23,9 @@ void Interpolator::apply(const std::deque<Snapshot>& snaps, double renderT, Game
     a = b = &snaps[i - 1];
   }
   const real alpha = b->t > a->t ? std::clamp((renderT - a->t) / (b->t - a->t), 0.0, 1.0) : 0.0;
-  const real ahead = renderT - b->t;
+  // Clamp extrapolation so a long reconnect/stall doesn't fling shots/hazards tens of seconds
+  // ahead of their last known snapshot.
+  const real ahead = std::min<real>(renderT - b->t, 0.5);
   const GameState& latest = *snaps.back().state;
   const GameState& from = *a->state;
   const GameState& to = *b->state;

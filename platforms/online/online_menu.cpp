@@ -87,6 +87,9 @@ EntryRequest OnlineMenu::baseEntry(const Profile& profile) const {
 
 void OnlineMenu::connect(EntryRequest entry) {
   if (!urlOk_) return;
+  // Leaving Home: cancel any in-flight room-list request so its connection doesn't linger for
+  // the whole match (updateMenu only pumps RoomList::update while on Home).
+  if (rooms_) rooms_->refresh(now_());
   session_ = std::make_unique<Session>(SessionConfig{url_, std::move(entry), config_.transport});
   session_->start(now_());
   message_.clear();
@@ -107,7 +110,10 @@ int OnlineMenu::visibleRooms() const {
 
 MenuResult OnlineMenu::updateMenu(std::uint32_t pressed, std::uint32_t, const sdl::TextInput& text, Profile& profile) {
   const double now = now_();
-  if (rooms_ && page_ == Page::Home) rooms_->update(now);
+  // Pump the room-list poll on Home, and also off Home while a request is still in flight so it
+  // can finish or time out instead of holding its connection open for the rest of the session
+  // (e.g. for a whole match). update() only opens a *new* request while on Home.
+  if (rooms_ && (page_ == Page::Home || rooms_->pending())) rooms_->update(now);
   if (session_) session_->update(now);
   if (!config_.bot.empty()) updateBot(profile);
   switch (page_) {

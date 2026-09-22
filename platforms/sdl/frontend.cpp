@@ -209,6 +209,7 @@ void Frontend::resetRunView() {
   anim_.reset();
   announce_ = {}; toast_ = {};
   feedbackPrimed_ = false;
+  feedbackEventId_ = 0;
   hurtFlash_ = 0;
   lastHp_.fill(-1);
   sampled_ = {};

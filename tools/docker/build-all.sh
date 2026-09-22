@@ -35,10 +35,10 @@ for target in "${TARGETS[@]}"; do
     host)
       docker build -q -t arcana-host -f tools/docker/host.Dockerfile tools/docker >/dev/null
       if run arcana-host tools/docker/host-build.sh; then
-        mkdir -p dist/linux
+        mkdir -p dist/linux dist/linux/assets
         cp build-linux/arcana_desktop dist/linux/
         cp assets/native_atlas_128.png assets/terrain_tiles.png dist/linux/
-        cp assets/cacert.pem dist/linux/
+        cp assets/cacert.pem dist/linux/assets/
         mkdir -p dist/linux/fonts && cp assets/fonts/* dist/linux/fonts/
         RESULT[$target]="ok  dist/linux/arcana_desktop (testes passaram)"
       else RESULT[$target]="FALHOU"; fi

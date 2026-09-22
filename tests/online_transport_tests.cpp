@@ -26,6 +26,10 @@ int main() {
   assert(checkServerUrl("https://example.com", false) == UrlCheck::Invalid);
   assert(checkServerUrl("wss://", false) == UrlCheck::Invalid);
   assert(checkServerUrl("", false) == UrlCheck::Invalid);
+  // Userinfo in the authority must not let a "localhost"-looking prefix mask the real (evil) host.
+  assert(checkServerUrl("ws://localhost:8081@evil.com/ws", false) == UrlCheck::Invalid);
+  // Scheme comparison is case-insensitive.
+  assert(checkServerUrl("WSS://example.com/ws", false) == UrlCheck::Ok);
 
   // The fetched dependencies build and link (versions pinned in CMakeLists.txt).
   assert(std::strcmp(MBEDTLS_VERSION_STRING, "3.6.4") == 0);

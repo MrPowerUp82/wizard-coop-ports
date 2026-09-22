@@ -231,6 +231,17 @@ int main() {
     assert(s->enemies.size() == static_cast<std::size_t>(cfg::MAX_ENEMIES));
     assert(stats.truncated == 199 - cfg::MAX_ENEMIES);
   }
+  {
+    // pendingPowers is server-controlled with no protocol cap; decodePlayer must cap it at 8
+    // (the server only ever offers 3) rather than trusting an arbitrarily long list.
+    json c = json::parse(R"({"t":1,"p":[],"e":[],"s":[],"es":[],"g":[],"h":[],"r":[],"z":[],"ev":[]})");
+    json pending = json::array();
+    for (int i = 0; i < 10; ++i) pending.push_back("power" + std::to_string(i));
+    c["p"].push_back(json::array({"p1", "Ana", 0, 0, 0, 100, 100, 0, 1, true, 190, json::object(), pending}));
+    auto s = std::make_unique<GameState>();
+    assert(decodeSnapshot(c, *s));
+    assert(s->players.at("p1").pendingPowers.size() == 8);
+  }
   assert(sanitizeName("Ana\x01L\xC3\xBA") == "AnaL\xC3\xBA");
   assert(sanitizeName("abcdefghijklmnopqrstu") == "abcdefghijklmnop");
   assert(sanitizeName(std::string(20, 'a') + "\xC3").size() == 16);
