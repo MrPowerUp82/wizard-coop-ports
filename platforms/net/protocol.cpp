@@ -244,4 +244,96 @@ std::string sanitizeName(std::string_view in) {
   return out;
 }
 
+namespace {
+// Names typed on a keyboard may carry bytes that are not UTF-8: replace them instead of throwing.
+std::string dump(const json& j) { return j.dump(-1, ' ', false, json::error_handler_t::replace); }
+
+std::vector<LobbyPlayer> lobbyPlayers(const json& o) {
+  std::vector<LobbyPlayer> out;
+  for (const auto& p : list(o, "players")) {
+    if (!p.is_object()) continue;
+    out.push_back({text(p, "id"), sanitizeName(text(p, "name")), std::clamp(static_cast<int>(field(p, "color")), 0, 3),
+                   !p.contains("connected") || truthy(p["connected"])});
+  }
+  return out;
+}
+std::vector<std::string> strings(const json& o, const char* key) {
+  std::vector<std::string> out;
+  for (const auto& v : list(o, key)) if (v.is_string()) out.push_back(v.get<std::string>());
+  return out;
+}
+} // namespace
+
+std::string encodeEntry(const EntryRequest& r) {
+  json j = {{"type", r.action}, {"v", kProtocolVersion}, {"name", r.name}, {"visibility", r.visibility},
+            {"color", r.color}, {"campaign", r.campaign}, {"curses", r.curses}};
+  if (r.action == "join") j["room"] = r.room;
+  json meta = json::object();
+  for (const auto& [upgrade, rank] : r.meta.rank) meta[upgrade] = rank;
+  j["meta"] = std::move(meta);
+  j["loadout"] = {{"weapon", r.loadout.weapon}, {"special", r.loadout.special}};
+  return dump(j);
+}
+std::string encodeResume(const std::string& room, const std::string& token) {
+  return dump({{"type", "resume"}, {"v", kProtocolVersion}, {"room", room}, {"token", token}});
+}
+std::string encodeInput(double x, double y, std::uint64_t seq) { return dump({{"type", "input"}, {"x", x}, {"y", y}, {"seq", seq}}); }
+std::string encodePing(double t) { return dump({{"type", "ping"}, {"t", t}}); }
+std::string encodeSimple(std::string_view type) { return dump({{"type", std::string(type)}}); }
+std::string encodeChoosePower(const std::string& power) { return dump({{"type", "choosePower"}, {"power", power}}); }
+std::string encodeDash(double x, double y) { return dump({{"type", "dash"}, {"x", x}, {"y", y}}); }
+std::string encodeSignal(const std::string& kind, std::optional<Vec2> at) {
+  json j = {{"type", "signal"}, {"signal", kind}};
+  if (at) { j["x"] = std::lround(at->x); j["y"] = std::lround(at->y); }
+  return dump(j);
+}
+std::string encodeSelectCharacter(int color) { return dump({{"type", "selectCharacter"}, {"color", color}}); }
+
+ServerMessage parseServerMessage(std::string_view raw, DecodeStats* stats) {
+  ServerMessage m;
+  const json j = json::parse(raw, nullptr, false);
+  if (!j.is_object()) return m;
+  try {
+    const std::string type = text(j, "type");
+    if (type == "pong") {
+      m.kind = ServerKind::Pong;
+      m.pongT = field(j, "t");
+    } else if (type == "joined") {
+      m.kind = ServerKind::Joined;
+      m.joined = {text(j, "room"), text(j, "playerId"), text(j, "token"), text(j, "visibility"),
+                  std::clamp(static_cast<int>(field(j, "color")), 0, 3), j.contains("resumed") && truthy(j["resumed"])};
+    } else if (type == "lobby") {
+      if (j.contains("players") && !j["players"].is_array()) return m;
+      m.kind = ServerKind::Lobby;
+      m.lobby = {static_cast<int>(field(j, "count")), text(j, "visibility"), text(j, "hostId"), text(j, "campaign"),
+                 strings(j, "curses"), lobbyPlayers(j), j.contains("running") && truthy(j["running"])};
+    } else if (type == "error") {
+      m.kind = ServerKind::Error;
+      m.error = {text(j, "code"), text(j, "message"), lobbyPlayers(j)};
+      if (m.error.message.empty()) m.error.message = "Erro do servidor.";
+    } else if (type == "rooms") {
+      m.kind = ServerKind::Rooms;
+      for (const auto& r : list(j, "rooms")) {
+        if (!r.is_object()) continue;
+        m.rooms.rooms.push_back({text(r, "code"), sanitizeName(text(r, "host")), text(r, "campaign"), static_cast<int>(field(r, "count")),
+                                 r.contains("running") && truthy(r["running"]), strings(r, "curses")});
+      }
+      if (const auto cap = j.find("capacity"); cap != j.end() && cap->is_object()) {
+        m.rooms.used = static_cast<int>(field(*cap, "used"));
+        m.rooms.max = static_cast<int>(field(*cap, "max"));
+      }
+      m.rooms.version = static_cast<int>(field(j, "v", 1));
+    } else if (type == "start" || type == "state") {
+      auto state = std::make_shared<GameState>();
+      const auto body = j.find("state");
+      if (body == j.end() || !decodeSnapshot(*body, *state, stats)) { m.kind = ServerKind::BadSnapshot; return m; }
+      m.kind = type == "start" ? ServerKind::Start : ServerKind::State;
+      m.state = std::move(state);
+    }
+  } catch (const json::exception&) {
+    m = ServerMessage{};
+  }
+  return m;
+}
+
 } // namespace arcana::online
