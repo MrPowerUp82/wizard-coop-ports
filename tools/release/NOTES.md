@@ -1,6 +1,13 @@
 Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch**, **PS Vita** e **PSP**, com builds para Windows e Linux. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
 
-## Novidades da v0.8.0
+## Novidades da v0.9.0
+
+- **The God no Grimório:** custa 60.000 moedas e continua desbloqueado após redistribuir melhorias. Começa com 500 de vida, +50% de dano, +20% de velocidade, 12 de armadura e ataques 15% mais rápidos. Seus disparos atravessam três inimigos; dois planetas orbitam e causam dano por contato. Os especiais são Big Bang e Constelação.
+- **Sprites próprios para os três personagens desbloqueáveis:** O Desenvolvedor, Guardião da Aurora e The God agora usam suas artes finais no atlas nativo, inclusive na seleção e durante a partida.
+- **Raio solar passivo do Guardião da Aurora:** a auréola atinge automaticamente o inimigo mais próximo em até 280 unidades a cada 5 segundos, causando 2,5× o dano. É uma habilidade separada do Familiar Arcano.
+- **Cooperativo online no PC:** seleção e desbloqueio de The God são transmitidos ao servidor; o efeito do raio solar da Aurora aparece para os demais jogadores.
+
+## Da v0.8.0
 
 - **Dois novos personagens jogáveis (O Desenvolvedor e o Guardião da Aurora):**
   - **O Desenvolvedor (Personagem Secreto):** Na tela de título, aperte sete vezes o botão de trocar opções do Jogador 1 (R no teclado, X/Y no controle, □/△ no Vita e no PSP). Ele possui 5× de vida, 4× de dano, velocidade de ataque dobrada, 3 projéteis iniciais, +35% de velocidade e 12 de armadura. Dispara *Código-fonte* (atravessa até 6 inimigos, desacelera e explode em área). Seu especial *Reescrever realidade* apaga projéteis e atinge inimigos num raio de 600 com 24× o dano, curando 50% e recarregando passivamente em 10 s. Com *Segundo feitiço*, *Restauração do sistema* elimina instantaneamente todos os inimigos no mapa (incluindo elites e chefes), cura aliados em 100% e protege por 5 s.

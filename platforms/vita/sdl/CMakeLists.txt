@@ -6,7 +6,7 @@ if(NOT DEFINED ENV{VITASDK})
   message(FATAL_ERROR "VITASDK is not set.")
 endif()
 set(CMAKE_TOOLCHAIN_FILE "$ENV{VITASDK}/share/vita.toolchain.cmake" CACHE PATH "toolchain")
-project(ArcanaSurvivorsVitaSDL VERSION 0.8.0 LANGUAGES C CXX)
+project(ArcanaSurvivorsVitaSDL VERSION 0.9.0 LANGUAGES C CXX)
 include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 
 set(ROOT "${CMAKE_CURRENT_LIST_DIR}/../../..")
@@ -49,7 +49,7 @@ target_link_libraries(arcana_vita_sdl PRIVATE
 
 vita_create_self(eboot.bin arcana_vita_sdl UNSAFE)
 vita_create_vpk(arcana-survivors-native.vpk ARCA00001 eboot.bin
-  VERSION 00.80
+  VERSION 00.90
   NAME "Arcana Survivors"
   FILE ${ROOT}/assets/native_atlas_128.png assets/native_atlas_128.png
   FILE ${ROOT}/assets/terrain_tiles.png assets/terrain_tiles.png
