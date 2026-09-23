@@ -25,6 +25,8 @@ int main() {
     assert(j["unlocks"]["aurora"] == false);
     r.auroraUnlocked = true; r.color = AURORA;
     assert(json::parse(encodeEntry(r))["unlocks"]["aurora"] == true && json::parse(encodeEntry(r))["color"] == AURORA);
+    r.godUnlocked = true; r.color = GOD;
+    assert(json::parse(encodeEntry(r))["unlocks"]["god"] == true && json::parse(encodeEntry(r))["color"] == GOD);
     r.action = "create";
     assert(!json::parse(encodeEntry(r)).contains("room"));
     r.name = std::string("Ana\xFF");  // invalid UTF-8 never throws
@@ -57,7 +59,7 @@ int main() {
     assert(lobby.lobby.players[1].color == 3 && !lobby.lobby.players[1].connected && lobby.lobby.curses[0] == "tyrant");
     // The unlockable characters (4, 5) travel as they are; out-of-range colours are clamped.
     const auto secret = parseServerMessage(R"({"type":"lobby","players":[{"id":"u1","name":"Dev","color":4},{"id":"u2","name":"Sol","color":5},{"id":"u3","name":"X","color":9}]})");
-    assert(secret.lobby.players[0].color == DEVELOPER && secret.lobby.players[1].color == AURORA && secret.lobby.players[2].color == AURORA);
+    assert(secret.lobby.players[0].color == DEVELOPER && secret.lobby.players[1].color == AURORA && secret.lobby.players[2].color == GOD);
     assert(parseServerMessage(R"({"type":"joined","room":"A","playerId":"u1","token":"t","color":5})").joined.color == AURORA);
     const auto locked = parseServerMessage(R"({"type":"error","code":"CHARACTER_LOCKED","message":"Vença o modo Clássico para desbloquear o Guardião da Aurora."})");
     assert(locked.kind == ServerKind::Error && locked.error.code == "CHARACTER_LOCKED" && !locked.error.message.empty());

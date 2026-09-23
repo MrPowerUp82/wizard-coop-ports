@@ -43,18 +43,19 @@ constexpr UpgradeText kUpgrades[] = {
   {"arsenal", "Arsenal", "Desbloqueio: escolha a arma inicial antes da partida"},
   {"secondSpell", "Segundo feitiço", "Desbloqueio: um especial alternativo para cada personagem"},
   {"endless", "Ritual infinito", "Desbloqueio: os seis reinos se repetem cada vez mais difíceis"},
+  {"theGod", "The God", "Personagem: 500 vida, +50% dano, +20% velocidade, 12 armadura, 2 planetas"},
 };
 constexpr int kShopRows = static_cast<int>(std::size(kUpgrades)) + 1; // + respec
 constexpr const char* kStartingWeapons[] = {"orbit", "aura", "chain", "runes", "familiar"};
 constexpr const char* kAltSpecials[CHARACTER_COUNT] = {"Tempestade de granizo", "Égide flamejante", "Florescer", "Eclipse",
-                                                        "Restauração do sistema", "Coroa da aurora"};
+                                                        "Restauração do sistema", "Coroa da aurora", "Constelação"};
 
 // src/menu.js characterNames/characterEffects and server/weapons.js SPECIALS.
-constexpr const char* kCharacterNames[CHARACTER_COUNT] = {"Azul", "Vermelho", "Verde", "Roxo", "O Desenvolvedor", "Guardião da Aurora"};
+constexpr const char* kCharacterNames[CHARACTER_COUNT] = {"Azul", "Vermelho", "Verde", "Roxo", "O Desenvolvedor", "Guardião da Aurora", "The God"};
 constexpr const char* kCharacterEffects[CHARACTER_COUNT] = {"Desacelera inimigos", "Explode em área", "Atravessa 3 inimigos", "Lâmina larga, até 2 alvos",
-                                                            "Secreto: 5× vida, 4× dano", "+50% vida, +35% dano"};
+                                                            "Secreto: 5× vida, 4× dano", "+50% vida, +35% dano, raio solar", "500 vida, +50% dano, 2 planetas"};
 constexpr const char* kCharacterSpecials[CHARACTER_COUNT] = {"Nova glacial", "Meteoro", "Jardim de espinhos", "Passo lunar",
-                                                             "Reescrever realidade", "Alvorada"};
+                                                             "Reescrever realidade", "Alvorada", "Big Bang"};
 constexpr int kSecretTaps = 7; // src/menu.js: seven taps on the title wake the Developer
 
 struct PowerText { const char* id; const char* desc; };
@@ -428,7 +429,7 @@ void Frontend::updateShop() {
     sfx(Sound::Coin);
     return;
   }
-  if (buyUpgrade(profile_, kUpgrades[shopIndex_].id)) {
+  if (shopIndex_ == kShopRows - 2 ? buyGod(profile_) : buyUpgrade(profile_, kUpgrades[shopIndex_].id)) {
     saveProfileNow();
     sfx(Sound::Chest);
   } else {
@@ -1286,10 +1287,11 @@ void Frontend::renderShop(BatchRenderer& b, float width, float height) {
     }
     const auto& up = kUpgrades[i];
     const auto it = profile_.upgrades.rank.find(up.id);
-    const int rank = it == profile_.upgrades.rank.end() ? 0 : it->second;
-    int max = 0;
-    while (nextUpgradeCost(up.id, max) >= 0) ++max;
-    const int cost = nextUpgradeCost(up.id, rank);
+    const bool god = i == kShopRows - 2;
+    const int rank = god ? static_cast<int>(profile_.unlocks.god) : it == profile_.upgrades.rank.end() ? 0 : it->second;
+    int max = god ? 1 : 0;
+    if (!god) while (nextUpgradeCost(up.id, max) >= 0) ++max;
+    const int cost = god ? (profile_.unlocks.god ? -1 : 60000) : nextUpgradeCost(up.id, rank);
     const bool affordable = cost >= 0 && profile_.coins >= cost;
     b.text(x + 14 * s, y + 5 * s, up.title, 19 * s, sel ? kText : rgba(205, 212, 235));
     for (int r = 0; r < max; ++r)

@@ -14,7 +14,7 @@ enum class SpriteId : std::uint8_t {
   Bolt, Fire, Thorn, Blade,
   Gem, GreenGem, Coin, Heart,
   GemRare, GemEpic,
-  PlayerDeveloper, PlayerAurora, BoltDeveloper, BoltAurora,
+  PlayerDeveloper, PlayerAurora, BoltDeveloper, BoltAurora, PlayerGod, BoltGod,
   Unknown,
   Count
 };

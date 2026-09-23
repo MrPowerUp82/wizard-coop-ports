@@ -72,7 +72,7 @@ int main() {
     assert(f->profile().coins == 197 && loadProfile(kPath).coins == 197);
     // Respec needs two presses and refunds everything.
     tap(*f, 0, ActDown); tap(*f, 0, ActDown); tap(*f, 0, ActConfirm); // Play -> Ritual -> Grimório
-    for (int i = 0; i < 15; ++i) tap(*f, 0, ActDown); // last row: respec
+    for (int i = 0; i < 16; ++i) tap(*f, 0, ActDown); // last row: respec
     tap(*f, 0, ActConfirm);
     assert(rank(f->profile(), "vigor") == 1);    // armed only
     tap(*f, 0, ActConfirm);

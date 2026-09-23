@@ -7,7 +7,7 @@ This target does **not** embed QuickJS, HTML, Canvas or the old JS bridge. It li
 - 60 Hz fixed-step simulation.
 - Vita controls read directly through `SceCtrl`.
 - Native sprite/circle rendering through libvita2d/GXM.
-- One pre-baked 1536×1536 atlas; no WebP decode/recolor/canvas baking at runtime.
+- One pre-baked 1792×1536 atlas; no WebP decode/recolor/canvas baking at runtime.
 - Fixed-capacity hot entity arrays in the C++ core.
 - Player movement, auto-attack, dash, special, enemies, drops, bosses and power choices run through the C++ simulation.
 

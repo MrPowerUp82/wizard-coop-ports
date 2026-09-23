@@ -32,7 +32,7 @@ fechar o jogo ou acabar a bateria no meio não corrompe o progresso, e reinstala
   Sinais para os aliados: Q (venham aqui), E (ajuda), X (cuidado), C (olhem ali); no controle,
   segure X/Y e aperte uma direção.
 - **Quatro personagens** (Azul, Vermelho, Verde e Roxo), cada um com o próprio tiro e especial, e
-  **dois desbloqueáveis** (O Desenvolvedor e o Guardião da Aurora, abaixo); no co-op ninguém repete
+  **três desbloqueáveis** (O Desenvolvedor, Guardião da Aurora e The God, abaixo); no co-op ninguém repete
   personagem.
 - **Grimório (meta-progressão):** as moedas de cada partida compram os 15 upgrades permanentes do
   jogo web, incluindo os desbloqueios Arsenal (arma inicial), Segundo feitiço (especial alternativo)
@@ -68,12 +68,21 @@ personagem entra na seleção na hora. Derrotas, abandonos e os rituais rápido 
 
 O Guardião usa vestes douradas e uma auréola solar. Tem **150 de vida, +35% de dano, +10% de
 velocidade, 3 de armadura e intervalo de ataque 15% menor**, antes das melhorias do Grimório. A
-**Lança da aurora** atravessa dois alvos. **Alvorada** causa 6× de dano em 300 unidades, apaga
+**Lança da aurora** atravessa dois alvos. Sua auréola dispara um raio solar no inimigo mais próximo
+em até 280 unidades a cada 5 s, causando 2,5× seu dano. **Alvorada** causa 6× de dano em 300 unidades, apaga
 projéteis nesse raio e protege por 1,5 s. Com *Segundo feitiço*, **Coroa da aurora** dispara 12
 lanças radiais com 3× de dano. Os especiais carregam com cristais normalmente.
 
-Online, os dois funcionam com quem joga no navegador: o servidor só aceita o Guardião de quem
-informa a vitória no Clássico, como na versão web.
+### Personagem comprável: The God
+
+**The God** custa **60.000 moedas** no Grimório e permanece desbloqueado após a redistribuição das
+melhorias. Tem 500 de vida, +50% de dano, +20% de velocidade, 12 de armadura, intervalo de ataque
+15% menor e disparos que atravessam três inimigos. Dois planetas orbitam e ferem inimigos por
+contato, separadamente dos Orbes arcanos. **Big Bang** atinge inimigos em 300 unidades, apaga
+projéteis próximos e protege por 1,5 s. O especial alternativo **Constelação** dispara 12 orbes.
+
+Os três personagens funcionam no cooperativo com quem joga no navegador, usando os desbloqueios
+salvos no perfil local para entrar no servidor.
 
 ## Controles
 

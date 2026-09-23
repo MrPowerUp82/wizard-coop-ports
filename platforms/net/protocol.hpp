@@ -45,6 +45,7 @@ struct EntryRequest {
   MetaRanks meta;                // Grimório ranks; the server sanitizes them
   Loadout loadout;
   bool auroraUnlocked{};         // `unlocks.aurora`: the server refuses the Aurora Guardian without it
+  bool godUnlocked{};
 };
 
 std::string encodeEntry(const EntryRequest& request);

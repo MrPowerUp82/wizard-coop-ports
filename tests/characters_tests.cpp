@@ -62,7 +62,7 @@ int main() {
         selectPlayerCharacter(p, color);
         assert(sameStats(p, createPlayer("p", "", color, &meta)));
       }
-    assert(createPlayer("x", "", 99).color == AURORA && createPlayer("x", "", -3).color == 0);
+    assert(createPlayer("x", "", 99).color == GOD && createPlayer("x", "", -3).color == 0);
   }
 
   // Código-fonte: three piercing bolts that slow and splash, never hitting the same enemy twice.
@@ -212,6 +212,44 @@ int main() {
 
   // Only a Classic victory over the sixth realm earns the Aurora; the unlock is recorded once.
   {
+    const Player base = createPlayer("b", "Mago", 0);
+    Player god = createPlayer("g", "The God", GOD);
+    assert(near(god.maxHp, 500) && near(god.damage, base.damage * 1.5));
+    assert(near(god.speed, base.speed * 1.2) && near(god.attackDelay, base.attackDelay * .85));
+    assert(near(god.armor, 12) && god.projectiles == 1);
+    selectPlayerCharacter(god, AURORA);
+    selectPlayerCharacter(god, GOD);
+    assert(sameStats(god, createPlayer("g", "The God", GOD)));
+
+    GameState s = fixture(GOD);
+    s.enemies.push_back(enemy(1, 66));
+    updateGame(s, .05, rng);
+    assert(s.enemies[0].hp < s.enemies[0].maxHp);
+    assert(s.players.at("p").stats.by["orbit"] > 0);
+    s.players.at("p").specialCharge = 100;
+    assert(activateSpecial(s, "p", rng));
+    const Loadout alt{"", 1}; MetaRanks second; second.rank["secondSpell"] = 1;
+    s.players["a"] = createPlayer("a", "The God", GOD, &second, &alt);
+    s.players["a"].specialCharge = 100;
+    assert(activateSpecial(s, "a", rng));
+    assert(s.shots.size() >= 12);
+    for (const auto& shot : s.shots) if (shot.special && shot.color == GOD) assert(shot.pierce == 3);
+  }
+
+  {
+    GameState s = fixture(AURORA);
+    s.enemies.push_back(enemy(1, 100));
+    s.enemies.push_back(enemy(2, 200));
+    updateGame(s, .05, rng);
+    assert(near(s.enemies[0].hp, 10000 - s.players.at("p").damage * 2.5));
+    assert(near(s.enemies[1].hp, 10000));
+    assert(!s.events.empty() && s.events.back().kind == "auroraRay");
+    assert(s.events.back().points.size() == 2);
+    updateGame(s, .05, rng);
+    assert(near(s.enemies[0].hp, 10000 - s.players.at("p").damage * 2.5));
+  }
+
+  {
     GameState win = createGameState("classic");
     win.over = win.victory = true; win.phase = 5;
     assert(earnsAurora(win));
@@ -232,12 +270,16 @@ int main() {
     assert(!characterAvailable(p.unlocks, -1) && !characterAvailable(p.unlocks, CHARACTER_COUNT));
     // Both unlocks and the chosen characters survive a save round trip.
     p.unlocks.developer = true;
+    p.coins = 60000;
+    assert(!characterAvailable(p.unlocks, GOD));
+    assert(buyGod(p) && p.unlocks.god && p.coins == 0 && !buyGod(p));
+    assert(respec(p) == 0 && p.unlocks.god);
     p.prefs.characters = {AURORA, DEVELOPER, 2, 3};
     constexpr const char* path = "characters_test_profile.ini";
     assert(saveProfileAtomic(p, path));
     const Profile q = loadProfile(path);
     std::remove(path);
-    assert(q.unlocks.developer && q.unlocks.aurora && q.prefs.characters[0] == AURORA && q.prefs.characters[1] == DEVELOPER);
+    assert(q.unlocks.developer && q.unlocks.aurora && q.unlocks.god && q.prefs.characters[0] == AURORA && q.prefs.characters[1] == DEVELOPER);
   }
 
   // The daily challenge keeps drawing only the four standard mages.

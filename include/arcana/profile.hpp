@@ -11,7 +11,7 @@ struct Preferences { std::array<int,cfg::MAX_PLAYERS> characters{0,1,2,3}; std::
 struct DailyRecord { std::string key; int phase{},loop{}; double time{}; bool victory{}; };
 // Local unlocks, like the web client's localStorage flags: discovering the secret (Developer) and
 // clearing the Classic ritual (Aurora Guardian). Not tied to any account.
-struct Unlocks { bool developer{}, aurora{}; };
+struct Unlocks { bool developer{}, aurora{}, god{}; };
 struct Profile {
   int coins{}, invested{}; MetaRanks upgrades;
   Unlocks unlocks;
@@ -25,6 +25,7 @@ bool saveProfile(const Profile& p,const std::string& path);
 bool saveProfileAtomic(const Profile& p,const std::string& path);
 int nextUpgradeCost(const std::string& id,int rank);
 bool buyUpgrade(Profile& p,const std::string& id);
+bool buyGod(Profile& p);
 int respec(Profile& p);
 void deposit(Profile& p,int amount);
 void observeCodex(Profile& p,const GameState& state,const Player* me=nullptr);

@@ -390,6 +390,17 @@ void drawPlayers(Frame& f) {
     b.ellipse(x, y + 24, 19, 6, rgba(0, 0, 0, static_cast<std::uint8_t>(pose.alpha * 0.24f * 255)));
     b.sprite(native::playerSprite(c), x + pose.x, y + pose.y, 68, pose.rotation, pose.alpha, pose.sx, pose.sy, pose.flash);
     if (p.alive && c == AURORA) b.ellipse(x, y - 34, 18, 6, A(color, 0.8f), 2); // solar halo
+    if (p.alive && c == GOD) {
+      for (int n = 0; n < 2; ++n) {
+        const double a = f.game.time * 2.5 + n * PI;
+        const float ox = x + static_cast<float>(fcos(a) * 66), oy = y + static_cast<float>(fsin(a) * 66);
+        b.circle(ox, oy, 18, rgba(50, 199, 255, 55));
+        b.circle(ox, oy, 11, hex(0x08214e));
+        b.circle(ox, oy, 8, hex(0x195fc2));
+        b.circle(ox - 2, oy - 2, 3, hex(0xdcffff));
+        b.ellipse(ox, oy, 16, 5, hex(0x73e6ff), 2, -0.35f);
+      }
+    }
     if (p.alive && c == DEVELOPER) {
       // Rotating geometric sigils and the </> mark (src/render.js).
       for (int square = 0; square < 2; ++square) {
@@ -467,7 +478,7 @@ void drawEffectsNormal(Frame& f) {
   auto& b = f.b;
   for (const auto& fx : f.anim.effects()) {
     const float progress = fx.age / fx.life, fade = 1 - progress;
-    const bool unculled = fx.kind == FxKind::Chain || fx.kind == FxKind::FamiliarStrike || fx.kind == FxKind::Lunar || fx.kind == FxKind::Convergence;
+    const bool unculled = fx.kind == FxKind::Chain || fx.kind == FxKind::FamiliarStrike || fx.kind == FxKind::Lunar || fx.kind == FxKind::Convergence || fx.kind == FxKind::SolarRay;
     if (!unculled && !f.visible(fx.x, fx.y)) continue;
     switch (fx.kind) {
       case FxKind::Ghost:
@@ -579,11 +590,18 @@ void drawEffectsAdditive(Frame& f) {
   auto& b = f.b;
   for (const auto& fx : f.anim.effects()) {
     const float progress = fx.age / fx.life, fade = 1 - progress;
-    const bool unculled = fx.kind == FxKind::Chain || fx.kind == FxKind::FamiliarStrike || fx.kind == FxKind::Lunar || fx.kind == FxKind::Convergence;
+    const bool unculled = fx.kind == FxKind::Chain || fx.kind == FxKind::FamiliarStrike || fx.kind == FxKind::Lunar || fx.kind == FxKind::Convergence || fx.kind == FxKind::SolarRay;
     if (!unculled && !f.visible(fx.x, fx.y)) continue;
     switch (fx.kind) {
       case FxKind::Ring:
         b.circle(fx.x, fx.y, 5 + easeOut(progress) * fx.radius, A(fx.color, fade * fade), 1 + fade * 2);
+        break;
+      case FxKind::SolarRay:
+        if (fx.points.size() >= 2) {
+          b.line(fx.x, fx.y, fx.points[0], fx.points[1], 11, A(fx.color, fade * 0.45f));
+          b.line(fx.x, fx.y, fx.points[0], fx.points[1], 3, A(hex(0xfff9db), fade));
+          b.circle(fx.points[0], fx.points[1], 5 + progress * 9, A(hex(0xfff9db), fade), 2);
+        }
         break;
       case FxKind::Signal: {
         const float pulse = std::fmod(fx.age, 1.0f);

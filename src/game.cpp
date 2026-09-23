@@ -108,11 +108,11 @@ Vec2 movementDelta(const Player& p,real dt){real burst=std::min(dt,std::max(0.0,
 
 struct Spell { real speed,radius; int pierce; bool slow; real splash; };
 // server/weapons.js SPELLS: ... Código-fonte (Developer), Lança da aurora (Aurora Guardian).
-const std::array<Spell,CHARACTER_COUNT> SPELLS={Spell{490,29,1,true,0},Spell{430,29,1,false,75},Spell{560,29,3,false,0},Spell{400,48,2,false,0},Spell{620,38,6,true,95},Spell{530,32,2,false,0}};
+const std::array<Spell,CHARACTER_COUNT> SPELLS={Spell{490,29,1,true,0},Spell{430,29,1,false,75},Spell{560,29,3,false,0},Spell{400,48,2,false,0},Spell{620,38,6,true,95},Spell{530,32,2,false,0},Spell{550,33,3,false,0}};
 struct CharacterStats { real hp,damage,speed,attackDelay,armor; int projectiles; };
 const CharacterStats& statsOf(int color){
-  static constexpr CharacterStats standard{1,1,1,1,0,0},developer{5,4,1.35,.5,12,2},aurora{1.5,1.35,1.1,.85,3,0};
-  return color==DEVELOPER?developer:color==AURORA?aurora:standard;
+  static constexpr CharacterStats standard{1,1,1,1,0,0},developer{5,4,1.35,.5,12,2},aurora{1.5,1.35,1.1,.85,3,0},god{5,1.5,1.2,.85,12,0};
+  return color==DEVELOPER?developer:color==AURORA?aurora:color==GOD?god:standard;
 }
 Shot playerShot(const Player& p,real angle,bool special=false){const auto& sp=SPELLS[p.color];Shot sh;sh.x=p.x;sh.y=p.y;sh.vx=std::cos(angle)*sp.speed;sh.vy=std::sin(angle)*sp.speed;sh.ttl=special?2:1.55;sh.damage=p.damage*(special?3:1);sh.color=p.color;sh.special=special;sh.pierce=sp.pierce;sh.owner=p.id;if(!special&&p.color==3&&rankOf(p,"boomerang")){sh.boomerang=true;sh.fullmoon=rankOf(p,"fullmoon");}if(!special&&p.color==2&&rankOf(p,"bramble")){sh.pierce+=2;sh.damage*=1.15;}return sh;}
 
@@ -180,6 +180,28 @@ void castAurora(GameState& s,Player& p,Random& rnd,bool alt){
   for(std::size_t i=0;i<targets;++i){auto& e=s.enemies[i];if(e.hp>0&&distanceSq({p.x,p.y},{e.x,e.y})<=reach)damageEnemy(s,e,p.damage*6,rnd,&p,false,false,"","special");}
   retain(s.enemyShots,[&](const EnemyShot& sh){return distanceSq({p.x,p.y},{sh.x,sh.y})>reach;});
   p.invulnerableFor=std::max(p.invulnerableFor,1.5);
+}
+
+void updateGodPlanets(GameState& s,Player& p,Random& rnd){
+  constexpr real radius=66, hitRadius=31;
+  for(int n=0;n<2;++n){
+    const real a=s.time*2.5+n*PI, x=p.x+std::cos(a)*radius, y=p.y+std::sin(a)*radius;
+    for(auto& e:s.enemies)if(e.hp>0&&distanceSq({x,y},{e.x,e.y})<hitRadius*hitRadius&&e.godPlanetHitUntil<=s.time){
+      e.godPlanetHitUntil=s.time+.6;
+      damageEnemy(s,e,p.damage*.75,rnd,&p,false,false,"","orbit");
+    }
+  }
+}
+
+void updateAuroraRay(GameState& s,Player& p,Random& rnd){
+  if(s.time<p.auroraRayAt)return;
+  Enemy* target=nearestEnemy(s,{p.x,p.y},280);
+  if(!target){p.auroraRayAt=s.time+.25;return;}
+  p.auroraRayAt=s.time+5;
+  Event ev;ev.kind="auroraRay";ev.x=p.x;ev.y=p.y-25;ev.color=AURORA;
+  ev.points.push_back(target->x);ev.points.push_back(target->y);
+  damageEnemy(s,*target,p.damage*2.5,rnd,&p,false,false,"","solarRay");
+  pushEvent(s,std::move(ev));
 }
 
 void addBurnZone(GameState& s,Player& p,real x,real y){real radius=rankOf(p,"hellfire")?80:55,ttl=rankOf(p,"hellfire")?3:2,dps=p.damage*(rankOf(p,"hellfire")?.75:.5);for(auto& z:s.zones)if(z.owner==p.id&&distanceSq({z.x,z.y},{x,y})<900){z.ttl=ttl;return;}Zone z;z.x=x;z.y=y;z.radius=radius;z.ttl=ttl;z.dps=dps;z.kind="burn";z.owner=p.id;z.color=1;addZone(s,z);}
@@ -317,7 +339,7 @@ void updateFamiliar(GameState& s,Player& p,int rank,real dt,Random& rnd){
 
 
 void updateWeapons(GameState& s,real dt,Random& rnd,const PlayerList& alive){
-  for(auto* p:alive){if(!p->pendingPowers.empty())continue;if(int r=rankOf(*p,"orbit"))updateOrbit(s,*p,r,dt,rnd);if(int r=rankOf(*p,"aura"))updateAura(s,*p,r,dt,rnd,alive);if(int r=rankOf(*p,"chain"))updateChain(s,*p,r,dt,rnd);if(int r=rankOf(*p,"runes"))updateRunes(s,*p,r,dt);if(int r=rankOf(*p,"familiar"))updateFamiliar(s,*p,r,dt,rnd);}
+  for(auto* p:alive){if(!p->pendingPowers.empty())continue;if(int r=rankOf(*p,"orbit"))updateOrbit(s,*p,r,dt,rnd);if(p->color==GOD)updateGodPlanets(s,*p,rnd);if(p->color==AURORA)updateAuroraRay(s,*p,rnd);if(int r=rankOf(*p,"aura"))updateAura(s,*p,r,dt,rnd,alive);if(int r=rankOf(*p,"chain"))updateChain(s,*p,r,dt,rnd);if(int r=rankOf(*p,"runes"))updateRunes(s,*p,r,dt);if(int r=rankOf(*p,"familiar"))updateFamiliar(s,*p,r,dt,rnd);}
   for(auto& rune:s.runes){rune.ttl-=dt;rune.arm-=dt;if(rune.arm>0||rune.ttl<=0)continue;bool trigger=false;for(auto& e:s.enemies)if(e.hp>0&&distanceSq({rune.x,rune.y},{e.x,e.y})<46.0*46.0){trigger=true;break;}if(!trigger)continue;rune.ttl=0;Player* owner=nullptr;auto oi=s.players.find(rune.owner);if(oi!=s.players.end())owner=&oi->second;for(auto& e:s.enemies)if(e.hp>0&&distanceSq({rune.x,rune.y},{e.x,e.y})<rune.radius*rune.radius)damageEnemy(s,e,rune.damage,rnd,owner,false,false,"fire","runes");{Event ev;ev.kind="boom";ev.x=rune.x;ev.y=rune.y;ev.r=rune.radius;ev.color=rune.color;pushEvent(s,std::move(ev));}
     if(owner&&rankOf(*owner,"stormrunes")){native::StaticVector<std::uint64_t,4> hit;Vec2 from{rune.x,rune.y};Event ev;ev.kind="chain";ev.color=owner->color;ev.points={from.x,from.y};for(int n=0;n<3;n++){Enemy* t=nullptr;real bd=170.0*170.0;for(auto& e:s.enemies)if(e.hp>0&&std::find(hit.begin(),hit.end(),e.id)==hit.end()){real d=distanceSq(from,{e.x,e.y});if(d<bd){bd=d;t=&e;}}if(!t)break;hit.push_back(t->id);ev.points.push_back(t->x);ev.points.push_back(t->y);damageEnemy(s,*t,owner->damage*.7,rnd,owner,false,false,"lightning","runes");from={t->x,t->y};}if(ev.points.size()>2)pushEvent(s,std::move(ev));}}
   retain(s.runes,[](const Rune&r){return r.ttl>0;});
@@ -327,8 +349,8 @@ void updateWeapons(GameState& s,real dt,Random& rnd,const PlayerList& alive){
 
 } // namespace
 
-bool activateSpecial(GameState& s,const std::string& id,Random& rnd){auto it=s.players.find(id);if(it==s.players.end())return false;auto& p=it->second;if(!p.alive||s.over||s.phaseStatus=="transition"||!p.pendingPowers.empty()||p.specialCharge<100||p.specialCooldown>0)return false;bool alt=p.specialVariant==1;if(alt&&p.color==AURORA&&s.shots.size()+12>MAX_SHOTS)return false;if((alt&&p.color==2&&s.shots.size()+16>MAX_SHOTS)||(!alt&&p.color==3&&s.shots.size()+8>MAX_SHOTS))return false;if(p.color!=DEVELOPER&&p.color!=AURORA&&(alt?p.color!=2:(p.color==1||p.color==2))&&s.zones.size()>=MAX_ZONES)return false;p.specialCharge=0;p.specialCooldown=8;++p.castCount;Event ev;ev.kind="special";ev.x=p.x;ev.y=p.y;ev.color=p.color;ev.variant=alt?1:0;
- if(p.color==DEVELOPER)castDeveloper(s,p,rnd,alt);else if(p.color==AURORA)castAurora(s,p,rnd,alt);else if(alt)castAltSpecial(s,p,rnd,ev);else if(p.color==0){for(auto& e:s.enemies)if(e.hp>0&&distanceSq({p.x,p.y},{e.x,e.y})<280.0*280.0){e.freezeFor=e.boss?0:2;damageEnemy(s,e,p.damage*4,rnd,&p,true,false,"","special");}retain(s.enemyShots,[&](const EnemyShot& sh){return distanceSq({p.x,p.y},{sh.x,sh.y})>220.0*220.0;});}
+bool activateSpecial(GameState& s,const std::string& id,Random& rnd){auto it=s.players.find(id);if(it==s.players.end())return false;auto& p=it->second;if(!p.alive||s.over||s.phaseStatus=="transition"||!p.pendingPowers.empty()||p.specialCharge<100||p.specialCooldown>0)return false;bool alt=p.specialVariant==1;if(alt&&(p.color==AURORA||p.color==GOD)&&s.shots.size()+12>MAX_SHOTS)return false;if((alt&&p.color==2&&s.shots.size()+16>MAX_SHOTS)||(!alt&&p.color==3&&s.shots.size()+8>MAX_SHOTS))return false;if(p.color!=DEVELOPER&&p.color!=AURORA&&p.color!=GOD&&(alt?p.color!=2:(p.color==1||p.color==2))&&s.zones.size()>=MAX_ZONES)return false;p.specialCharge=0;p.specialCooldown=8;++p.castCount;Event ev;ev.kind="special";ev.x=p.x;ev.y=p.y;ev.color=p.color;ev.variant=alt?1:0;
+ if(p.color==DEVELOPER)castDeveloper(s,p,rnd,alt);else if(p.color==AURORA||p.color==GOD)castAurora(s,p,rnd,alt);else if(alt)castAltSpecial(s,p,rnd,ev);else if(p.color==0){for(auto& e:s.enemies)if(e.hp>0&&distanceSq({p.x,p.y},{e.x,e.y})<280.0*280.0){e.freezeFor=e.boss?0:2;damageEnemy(s,e,p.damage*4,rnd,&p,true,false,"","special");}retain(s.enemyShots,[&](const EnemyShot& sh){return distanceSq({p.x,p.y},{sh.x,sh.y})>220.0*220.0;});}
  else if(p.color==1){Enemy* t=nearestEnemy(s,{p.x,p.y},500);auto d=dashDirection(p,{p.input.x,p.input.y});Zone z;z.x=t?t->x:p.x+d.x*180;z.y=t?t->y:p.y+d.y*180;z.radius=165;z.ttl=3.6;z.warning=.6;z.kind="meteor";z.damage=p.damage*9;z.dps=p.damage*.5;z.owner=p.id;z.color=1;addZone(s,z);ev.x=z.x;ev.y=z.y;}
  else if(p.color==2){Zone z;z.x=p.x;z.y=p.y;z.radius=190;z.ttl=4;z.kind="roots";z.dps=p.damage*2;z.owner=p.id;z.color=2;addZone(s,z);}
  else {auto d=dashDirection(p,{p.input.x,p.input.y});real fx=p.x,fy=p.y;p.x+=d.x*170;p.y+=d.y*170;++p.motionId;p.invulnerableFor=std::max(p.invulnerableFor,.3);for(int n=0;n<8;n++){auto sh=playerShot(p,n*PI/4,true);sh.x=fx;sh.y=fy;sh.boomerang=true;s.shots.push_back(std::move(sh));}ev.x=p.x;ev.y=p.y;ev.points={fx,fy};}

@@ -50,17 +50,22 @@ SPRITES = [
     ('heart','sprites',(940.5,940.5,313.5,313.5),None),
     ('gemRare','sprites',(0,940.5,313.5,313.5),(70,1.0,1.0)),
     ('gemEpic','sprites',(0,940.5,313.5,313.5),(170,1.2,1.0)),
-    # Unlockable characters: src/sprites.js VARIANTS developer/aurora and their bolts.
-    ('playerDeveloper','sprites',(0,0,313.5,313.5),(-35,0.65,1.35)),
-    ('playerAurora','sprites',(0,0,313.5,313.5),(-165,0.8,1.3)),
+    # Standalone character art shared with the web game; keep the enum order in render_queue.hpp.
+    ('playerDeveloper','developer',None,None),
+    ('playerAurora','aurora',None,None),
     ('boltDeveloper','sprites',(0,627,313.5,313.5),(-35,0.65,1.35)),
     ('boltAurora','sprites',(0,627,313.5,313.5),(-165,0.8,1.3)),
+    ('playerGod','god',None,None),
+    ('boltGod','sprites',(0,627,313.5,313.5),(0,1.4,1.3)),
 ]
 
 sources = {
     'sprites': Image.open(ASSETS/'sprites.webp').convert('RGBA'),
     'phases': Image.open(ASSETS/'phases.webp').convert('RGBA'),
     'phases2': Image.open(ASSETS/'phases2.webp').convert('RGBA'),
+    'developer': Image.open(ASSETS/'developer.png').convert('RGBA'),
+    'aurora': Image.open(ASSETS/'aurora.png').convert('RGBA'),
+    'god': Image.open(ASSETS/'the-god.png').convert('RGBA'),
 }
 
 def recolor(img, spec):
@@ -85,9 +90,12 @@ rows=(len(SPRITES)+COLS-1)//COLS
 atlas=Image.new('RGBA',(COLS*CELL,rows*CELL),(0,0,0,0))
 resample=Image.Resampling.LANCZOS
 for i,(name,src_name,bounds,variant) in enumerate(SPRITES):
-    sx,sy,sw,sh=bounds
-    box=(round(sx),round(sy),round(sx+sw),round(sy+sh))
-    tile=sources[src_name].crop(box).resize((CELL,CELL),resample)
+    if bounds is None:
+        tile=sources[src_name].resize((CELL,CELL),resample)
+    else:
+        sx,sy,sw,sh=bounds
+        box=(round(sx),round(sy),round(sx+sw),round(sy+sh))
+        tile=sources[src_name].crop(box).resize((CELL,CELL),resample)
     tile=recolor(tile,variant)
     atlas.alpha_composite(tile,((i%COLS)*CELL,(i//COLS)*CELL))
 

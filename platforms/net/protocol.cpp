@@ -194,6 +194,7 @@ bool decode(const json& c, GameState& s, DecodeStats* stats) {
       if (std::string t = text(o, key); !t.empty()) { e.text = std::move(t); break; }
     if (const auto points = o.find("points"); points != o.end() && points->is_array())
       for (const auto& v : *points) if (!v.is_number() || !e.points.push_back(v.get<double>())) break;
+    if (e.kind == "auroraRay") { e.points.push_back(field(o, "tx")); e.points.push_back(field(o, "ty")); }
     e.player = text(o, "player");
     e.name = sanitizeName(text(o, "name"));
     add(s.events, std::move(e), stats);
@@ -279,7 +280,7 @@ std::string encodeEntry(const EntryRequest& r) {
   for (const auto& [upgrade, rank] : r.meta.rank) meta[upgrade] = rank;
   j["meta"] = std::move(meta);
   j["loadout"] = {{"weapon", r.loadout.weapon}, {"special", r.loadout.special}};
-  j["unlocks"] = {{"aurora", r.auroraUnlocked}};
+  j["unlocks"] = {{"aurora", r.auroraUnlocked}, {"god", r.godUnlocked}};
   return dump(j);
 }
 std::string encodeResume(const std::string& room, const std::string& token) {

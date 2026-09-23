@@ -80,6 +80,7 @@ EntryRequest OnlineMenu::baseEntry(const Profile& profile) const {
   e.name = profile.prefs.name.empty() ? "Arcanista" : profile.prefs.name;
   e.color = characterAvailable(profile.unlocks, profile.prefs.characters[0]) ? profile.prefs.characters[0] : 0;
   e.auroraUnlocked = profile.unlocks.aurora;
+  e.godUnlocked = profile.unlocks.god;
   e.campaign = profile.prefs.campaign;
   e.meta = profile.upgrades;
   e.loadout.weapon = rankOf(profile, "arsenal") > 0 ? profile.prefs.weapon : "";

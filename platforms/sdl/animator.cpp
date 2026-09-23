@@ -175,10 +175,11 @@ void Animator::altSpecial(const Event& e, float seed) {
 void Animator::special(const Event& e) {
   const float seed = static_cast<float>(e.id) * 7.31f;
   const float x = static_cast<float>(e.x), y = static_cast<float>(e.y);
-  if (e.color == AURORA) {
+  if (e.color == AURORA || e.color == GOD) {
     // Alvorada's solar burst, or the tighter crown of Coroa da aurora (seed = variant).
-    if (Effect* fx = push(FxKind::Aurora, x, y, 0.9f, true)) { fx->color = hex(0xffd778); fx->radius = e.variant == 1 ? 160 : 300; fx->seed = static_cast<float>(e.variant); }
-    motes(x, y, MoteShape::Star, hex(0xffe8aa), 16, 220, 25, 0.8f, 0, 5, 2);
+    const auto color=e.color==GOD?hex(0x36bfff):hex(0xffd778);
+    if (Effect* fx = push(FxKind::Aurora, x, y, 0.9f, true)) { fx->color = color; fx->radius = e.variant == 1 ? 160 : 300; fx->seed = static_cast<float>(e.variant); }
+    motes(x, y, MoteShape::Star, color, 16, 220, 25, 0.8f, 0, 5, 2);
     return;
   }
   if (e.color == DEVELOPER) {
@@ -253,6 +254,12 @@ void Animator::handleEvent(const Event& e) {
     shake(10);
   } else if (k == "evade") {
     burst(x, y, element(e.color), 5, 50);
+  } else if (k == "auroraRay" && e.points.size() >= 2) {
+    if (Effect* fx = push(FxKind::SolarRay, x, y, 0.3f)) {
+      fx->color = hex(0xffd778);
+      fx->points.push_back(static_cast<float>(e.points[0]));
+      fx->points.push_back(static_cast<float>(e.points[1]));
+    }
   } else if (k == "chain") {
     if (Effect* fx = push(FxKind::Chain, x, y, 0.28f)) {
       fx->color = element(e.color); fx->seed = static_cast<float>(e.id);

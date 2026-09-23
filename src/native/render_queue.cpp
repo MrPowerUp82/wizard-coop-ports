@@ -68,21 +68,21 @@ SpriteId spriteForEnemy(const Enemy& enemy) { return spriteFromName(enemy.type);
 SpriteId spriteForEnemyShot(const EnemyShot& shot) { return spriteFromName(shot.sprite); }
 
 std::uint32_t playerColor(int color, std::uint8_t alpha) {
-  // server/weapons.js SPELLS tints; the last two are the Developer (#73ffe4) and the Aurora Guardian (#ffd778).
+  // server/weapons.js SPELLS tints, including the three unlockable characters.
   static constexpr std::uint32_t colors[CHARACTER_COUNT] = {rgba(118, 223, 255), rgba(255, 153, 85), rgba(146, 237, 104),
-                                                            rgba(196, 160, 255), rgba(115, 255, 228), rgba(255, 215, 120)};
+                                                            rgba(196, 160, 255), rgba(115, 255, 228), rgba(255, 215, 120), rgba(54, 191, 255)};
   return withAlpha(colors[std::clamp(color, 0, CHARACTER_COUNT - 1)], alpha);
 }
 
 SpriteId playerSprite(int color) {
   static constexpr SpriteId sprites[CHARACTER_COUNT] = {SpriteId::Player0, SpriteId::Player1, SpriteId::Player2, SpriteId::Player3,
-                                                        SpriteId::PlayerDeveloper, SpriteId::PlayerAurora};
+                                                        SpriteId::PlayerDeveloper, SpriteId::PlayerAurora, SpriteId::PlayerGod};
   return sprites[std::clamp(color, 0, CHARACTER_COUNT - 1)];
 }
 
 SpriteId shotSprite(int color) {
   static constexpr SpriteId sprites[CHARACTER_COUNT] = {SpriteId::Bolt, SpriteId::Fire, SpriteId::Thorn, SpriteId::Blade,
-                                                        SpriteId::BoltDeveloper, SpriteId::BoltAurora};
+                                                        SpriteId::BoltDeveloper, SpriteId::BoltAurora, SpriteId::BoltGod};
   return sprites[std::clamp(color, 0, CHARACTER_COUNT - 1)];
 }
 
@@ -94,7 +94,7 @@ void bar(RenderQueue& out, float cx, float top, float width, real ratio, std::ui
   out.bars.push_back({cx - width * 0.5f, top, width * r, 4, fill});
 }
 
-void drawWeapons(const Player& p, float px, float py, const Camera& camera, RenderQueue& out) {
+void drawWeapons(const Player& p, real time, float px, float py, const Camera& camera, RenderQueue& out) {
   const float z = camera.zoom;
   if (const int rank = std::clamp(rankOf(p, "aura"), 0, 5)) {
     const bool evolved = rankOf(p, "sanctuary") > 0;
@@ -121,6 +121,15 @@ void drawWeapons(const Player& p, float px, float py, const Camera& camera, Rend
     out.circles.push_back({x, y, 16 * z, playerColor(p.color, 70), 7});
     out.circles.push_back({x, y, 9 * z, playerColor(p.color, 240), 7});
   }
+  if (p.color == GOD) for (int n = 0; n < 2; ++n) {
+    const real a = time * 2.5 + n * PI;
+    const float x = px + static_cast<float>(std::cos(a) * 66) * z;
+    const float y = py + static_cast<float>(std::sin(a) * 66) * z;
+    out.circles.push_back({x, y, 18 * z, rgba(50, 199, 255, 70), 7});
+    out.circles.push_back({x, y, 11 * z, rgba(8, 33, 78), 7});
+    out.circles.push_back({x, y, 8 * z, rgba(25, 95, 194), 7});
+    out.circles.push_back({x - 2 * z, y - 2 * z, 3 * z, rgba(220, 255, 255), 7});
+  }
 }
 
 void drawEvents(const GameState& state, const Camera& camera, RenderQueue& out) {
@@ -143,6 +152,12 @@ void drawEvents(const GameState& state, const Camera& camera, RenderQueue& out) 
         screenPoint(e.points[i - 1], e.points[i], camera, x2, y2);
         out.lines.push_back({x1, y1, x2, y2, 3, rgba(190, 230, 255, static_cast<std::uint8_t>(255 * (1 - age / 0.25)))});
       }
+    } else if (e.kind == "auroraRay" && e.points.size() >= 2 && age < 0.3) {
+      float tx, ty; screenPoint(e.points[0], e.points[1], camera, tx, ty);
+      const auto alpha=static_cast<std::uint8_t>(255 * (1 - age / 0.3));
+      out.lines.push_back({x, y, tx, ty, 10 * camera.zoom, rgba(255, 215, 120, static_cast<std::uint8_t>(alpha * 0.45f))});
+      out.lines.push_back({x, y, tx, ty, 3 * camera.zoom, rgba(255, 249, 219, alpha)});
+      out.circles.push_back({tx, ty, (5 + static_cast<float>(age) * 30) * camera.zoom, rgba(255, 249, 219, alpha), 8, 2});
     }
   }
 }
@@ -239,7 +254,7 @@ void buildRenderQueue(const GameState& state, const Camera& camera, RenderQueue&
         out.circles.push_back({x, y, 44 * z * static_cast<float>(player.reviveProgress / cfg::REVIVE_SECONDS), playerColor(player.color, 110), 8});
       continue;
     }
-    drawWeapons(player, x, y, camera, out);
+    drawWeapons(player, state.time, x, y, camera, out);
     const bool blink = player.invulnerableFor > 0 && std::fmod(state.time * 10, 1.0) < 0.5;
     out.circles.push_back({x, y + 26 * z, 22 * z, rgba(0, 0, 0, 70), 1}); // contact shadow
     out.sprites.push_back({sprite, x, y, 68.0f * z, 0, blink ? rgba(255, 255, 255, 120) : 0xffffffffu, 6, player.moveX < 0});

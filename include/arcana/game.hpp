@@ -23,7 +23,7 @@ inline real distanceSq(Vec2 a, Vec2 b) { const auto dx=a.x-b.x, dy=a.y-b.y; retu
 
 // Characters (Player::color): the four standard mages, then two unlockable ones — the secret
 // Developer (server/developer.js) and the Aurora Guardian, the Classic reward (server/aurora.js).
-constexpr int STANDARD_CHARACTERS = 4, DEVELOPER = 4, AURORA = 5, CHARACTER_COUNT = 6;
+constexpr int STANDARD_CHARACTERS = 4, DEVELOPER = 4, AURORA = 5, GOD = 6, CHARACTER_COUNT = 7;
 
 class Random {
 public:
@@ -66,7 +66,7 @@ struct Player {
   real reviveProgress{}; std::string reviveBy, reviving;
   int castCount{}; real castAngle{}, orbitAngle{}; std::uint64_t inputSeq{};
   int specialVariant{}; real signalAt{-std::numeric_limits<real>::infinity()};
-  real lifelinkAt{}, sanctuaryAt{}, auraTimer{}, chainTimer{}, runeTimer{};
+  real lifelinkAt{}, sanctuaryAt{}, auraTimer{}, chainTimer{}, runeTimer{}, auroraRayAt{};
   real shopProgress{};
   std::optional<Familiar> familiar;
   Stats stats;
@@ -82,6 +82,7 @@ struct Enemy {
   real attackCooldown{2.5}, rangedCooldown{1.5};
   real vx{}, vy{}; bool hasVelocity{};
   std::array<real, CHARACTER_COUNT> orbitHitUntil{}; // per character: unique within a run
+  real godPlanetHitUntil{};
 };
 struct Shot {
   real x{},y{},vx{},vy{},ttl{},damage{}; int color{}; int pierce{1};
