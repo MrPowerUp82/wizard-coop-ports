@@ -1,6 +1,15 @@
 Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch**, **PS Vita** e **PSP**, com builds para Windows e Linux. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
 
-## Novidades da v0.7.0
+## Novidades da v0.8.0
+
+- **Dois novos personagens jogáveis (O Desenvolvedor e o Guardião da Aurora):**
+  - **O Desenvolvedor (Personagem Secreto):** Na tela de título, aperte sete vezes o botão de trocar opções do Jogador 1 (R no teclado, X/Y no controle, □/△ no Vita e no PSP). Ele possui 5× de vida, 4× de dano, velocidade de ataque dobrada, 3 projéteis iniciais, +35% de velocidade e 12 de armadura. Dispara *Código-fonte* (atravessa até 6 inimigos, desacelera e explode em área). Seu especial *Reescrever realidade* apaga projéteis e atinge inimigos num raio de 600 com 24× o dano, curando 50% e recarregando passivamente em 10 s. Com *Segundo feitiço*, *Restauração do sistema* elimina instantaneamente todos os inimigos no mapa (incluindo elites e chefes), cura aliados em 100% e protege por 5 s.
+  - **Guardião da Aurora (Recompensa do Ritual Clássico):** Desbloqueado ao vencer os seis reinos no modo Clássico (solo, co-op local ou online). Mago dourado com auréola solar. Possui 150 de vida (+50%), +35% de dano, +10% de velocidade, 3 de armadura e intervalo de ataque 15% menor. Dispara a *Lança da aurora* (atravessa 2 alvos). Seu especial *Alvorada* causa uma explosão solar em 300 de raio com 6× de dano e apaga projéteis. Com *Segundo feitiço*, *Coroa da aurora* dispara 12 lanças solares radiais com 3× de dano.
+- **Atlas nativo expandido para 7 colunas:** novos sprites de magos e projéteis gerados com recolorização HSL precisa.
+- **Otimização de empacotamento no PSP (512×512):** refino do conjunto de caracteres Latin-1 essenciais na interface em português, permitindo que o novo atlas e todas as fontes caibam na página compacta sem perda visual.
+- **Compatibilidade total no co-op local e no multiplayer online para PC com cross-play.**
+
+## Da v0.7.0
 
 - **Co-op online no PC (Windows e Linux), junto com quem joga no navegador.** O jogo se conecta ao mesmo servidor da versão web, então as salas são as mesmas: dá para jogar com amigos no PC e no navegador na mesma partida.
   - **Salas abertas:** a lista mostra as salas com vaga, quem é o anfitrião, quantos jogadores tem e qual ritual.
@@ -66,7 +75,7 @@ Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Ninte
 
 ## Limitações conhecidas
 
-- Ainda faltam o Códex, o desafio diário, as maldições e o multiplayer online.
+- Ainda faltam o Códex, o desafio diário, as maldições e o multiplayer online nos consoles (Switch, Vita e PSP seguem com co-op local; o online está disponível no PC).
 - A orientação do analógico de um Joy-Con sozinho na horizontal ainda não foi validada em todos os firmwares. Se ele girar errado, avise na issue.
 - No PSP, o flash branco de dano virou uma tinta vermelha (falta espaço na textura de 512×512) e o co-op local não existe (o aparelho tem um controle só).
 - O build do Windows foi testado só sob Wine (não em Windows real); se algo falhar (janela, controle, som), avise na issue.

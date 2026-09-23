@@ -18,7 +18,7 @@ ICON        := icon.jpg
 
 APP_TITLE   := Arcana Survivors
 APP_AUTHOR  := MrPowerUp82
-APP_VERSION := 0.7.0
+APP_VERSION := 0.8.0
 
 ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS := -Wall -Wextra -O2 -ffunction-sections $(ARCH) $(DEFINES) \
