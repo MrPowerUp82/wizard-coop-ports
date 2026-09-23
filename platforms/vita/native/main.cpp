@@ -15,7 +15,7 @@ namespace {
 constexpr float kWidth = 960.0f;
 constexpr float kHeight = 544.0f;
 constexpr float kAtlasCell = 256.0f;
-constexpr int kAtlasCols = 6;
+constexpr int kAtlasCols = arcana::native::kAtlasColumns;
 
 float axis(std::uint8_t value) {
   float v = (static_cast<int>(value) - 128) / 127.0f;

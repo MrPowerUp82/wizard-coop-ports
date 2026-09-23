@@ -10,7 +10,7 @@ ASSETS = ROOT / 'assets'
 # drawn at 26-195 px, so a 768x768 atlas avoids heavy minification and saves texture bandwidth).
 CELL = int(sys.argv[1]) if len(sys.argv) > 1 else 256
 OUT = ASSETS / ('native_atlas.png' if CELL == 256 else f'native_atlas_{CELL}.png')
-COLS = 6
+COLS = 7  # arcana::native::kAtlasColumns
 
 # Order must match arcana::native::SpriteId (excluding Unknown/Count).
 SPRITES = [
@@ -50,6 +50,11 @@ SPRITES = [
     ('heart','sprites',(940.5,940.5,313.5,313.5),None),
     ('gemRare','sprites',(0,940.5,313.5,313.5),(70,1.0,1.0)),
     ('gemEpic','sprites',(0,940.5,313.5,313.5),(170,1.2,1.0)),
+    # Unlockable characters: src/sprites.js VARIANTS developer/aurora and their bolts.
+    ('playerDeveloper','sprites',(0,0,313.5,313.5),(-35,0.65,1.35)),
+    ('playerAurora','sprites',(0,0,313.5,313.5),(-165,0.8,1.3)),
+    ('boltDeveloper','sprites',(0,627,313.5,313.5),(-35,0.65,1.35)),
+    ('boltAurora','sprites',(0,627,313.5,313.5),(-165,0.8,1.3)),
 ]
 
 sources = {

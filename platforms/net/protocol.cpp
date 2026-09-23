@@ -59,7 +59,7 @@ Player decodePlayer(const json& row) {
   Player p;
   p.id = str(row, 0);
   p.name = sanitizeName(str(row, 1));
-  p.color = std::clamp(static_cast<int>(num(row, 2)), 0, 3);
+  p.color = std::clamp(static_cast<int>(num(row, 2)), 0, CHARACTER_COUNT - 1);
   p.x = num(row, 3); p.y = num(row, 4); p.hp = num(row, 5); p.maxHp = num(row, 6, 100);
   p.xp = num(row, 7); p.level = static_cast<int>(num(row, 8, 1)); p.alive = flag(row, 9); p.speed = num(row, 10, 190);
   if (row.size() > 11 && row[11].is_object())
@@ -259,7 +259,7 @@ std::vector<LobbyPlayer> lobbyPlayers(const json& o) {
   std::vector<LobbyPlayer> out;
   for (const auto& p : list(o, "players")) {
     if (!p.is_object()) continue;
-    out.push_back({text(p, "id"), sanitizeName(text(p, "name")), std::clamp(static_cast<int>(field(p, "color")), 0, 3),
+    out.push_back({text(p, "id"), sanitizeName(text(p, "name")), std::clamp(static_cast<int>(field(p, "color")), 0, CHARACTER_COUNT - 1),
                    !p.contains("connected") || truthy(p["connected"])});
   }
   return out;
@@ -279,6 +279,7 @@ std::string encodeEntry(const EntryRequest& r) {
   for (const auto& [upgrade, rank] : r.meta.rank) meta[upgrade] = rank;
   j["meta"] = std::move(meta);
   j["loadout"] = {{"weapon", r.loadout.weapon}, {"special", r.loadout.special}};
+  j["unlocks"] = {{"aurora", r.auroraUnlocked}};
   return dump(j);
 }
 std::string encodeResume(const std::string& room, const std::string& token) {
@@ -308,7 +309,7 @@ ServerMessage parseServerMessage(std::string_view raw, DecodeStats* stats) {
     } else if (type == "joined") {
       m.kind = ServerKind::Joined;
       m.joined = {text(j, "room"), text(j, "playerId"), text(j, "token"), text(j, "visibility"),
-                  std::clamp(static_cast<int>(field(j, "color")), 0, 3), j.contains("resumed") && truthy(j["resumed"])};
+                  std::clamp(static_cast<int>(field(j, "color")), 0, CHARACTER_COUNT - 1), j.contains("resumed") && truthy(j["resumed"])};
     } else if (type == "lobby") {
       if (j.contains("players") && !j["players"].is_array()) return m;
       m.kind = ServerKind::Lobby;

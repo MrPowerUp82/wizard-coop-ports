@@ -46,12 +46,16 @@ constexpr UpgradeText kUpgrades[] = {
 };
 constexpr int kShopRows = static_cast<int>(std::size(kUpgrades)) + 1; // + respec
 constexpr const char* kStartingWeapons[] = {"orbit", "aura", "chain", "runes", "familiar"};
-constexpr const char* kAltSpecials[4] = {"Tempestade de granizo", "Égide flamejante", "Florescer", "Eclipse"};
+constexpr const char* kAltSpecials[CHARACTER_COUNT] = {"Tempestade de granizo", "Égide flamejante", "Florescer", "Eclipse",
+                                                        "Restauração do sistema", "Coroa da aurora"};
 
 // src/menu.js characterNames/characterEffects and server/weapons.js SPECIALS.
-constexpr const char* kCharacterNames[4] = {"Azul", "Vermelho", "Verde", "Roxo"};
-constexpr const char* kCharacterEffects[4] = {"Desacelera inimigos", "Explode em área", "Atravessa 3 inimigos", "Lâmina larga, até 2 alvos"};
-constexpr const char* kCharacterSpecials[4] = {"Nova glacial", "Meteoro", "Jardim de espinhos", "Passo lunar"};
+constexpr const char* kCharacterNames[CHARACTER_COUNT] = {"Azul", "Vermelho", "Verde", "Roxo", "O Desenvolvedor", "Guardião da Aurora"};
+constexpr const char* kCharacterEffects[CHARACTER_COUNT] = {"Desacelera inimigos", "Explode em área", "Atravessa 3 inimigos", "Lâmina larga, até 2 alvos",
+                                                            "Secreto: 5× vida, 4× dano", "+50% vida, +35% dano"};
+constexpr const char* kCharacterSpecials[CHARACTER_COUNT] = {"Nova glacial", "Meteoro", "Jardim de espinhos", "Passo lunar",
+                                                             "Reescrever realidade", "Alvorada"};
+constexpr int kSecretTaps = 7; // src/menu.js: seven taps on the title wake the Developer
 
 struct PowerText { const char* id; const char* desc; };
 constexpr PowerText kPowerText[] = {
@@ -183,7 +187,7 @@ Frontend::Frontend(FrontendOptions options) : options_(std::move(options)) {
     for (int i = 0; i < cfg::MAX_PLAYERS; ++i) joined_[static_cast<std::size_t>(i)] = i < std::clamp(options_.autoplayPlayers, 1, cfg::MAX_PLAYERS);
   }
   for (int i = 0; i < 3; ++i) if (options_.campaign == kCampaigns[i].id) campaign_ = i;
-  if (options_.startImmediately || options_.autoplay) startRun();
+  character_ = options_.characters;  if (options_.startImmediately || options_.autoplay) startRun();
   else if (options_.openShop) screen_ = Screen::Shop;
   else if (options_.openCredits) screen_ = Screen::Credits;
   else if (options_.splash) screen_ = Screen::Splash;
@@ -269,6 +273,7 @@ void Frontend::resetRunView() {
   deposited_ = false;
   earned_ = 0;
   overTime_ = 0;
+  auroraEarned_ = false;
 }
 
 bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
@@ -288,6 +293,7 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
     case Screen::Title:
       updateTitle();
       if (quitRequested_) return false;
+      announce_.age += frameSeconds;
       break;
     case Screen::Shop: updateShop(); announce_.age += frameSeconds; toast_.age += frameSeconds; break;
     case Screen::Online: updateOnlineMenu(input); announce_.age += frameSeconds; toast_.age += frameSeconds; break;
@@ -357,6 +363,7 @@ void Frontend::updateTitle() {
   }
   if (pressed(0, ActLeft)) cycleCharacter(0, -1);
   if (pressed(0, ActRight)) cycleCharacter(0, 1);
+  if (pressed(0, ActAlt)) secretTap();
   if (!pressed(0, ActConfirm)) return;
   sfx(Sound::Click);
   switch (items[static_cast<std::size_t>(menuIndex_)]) {
@@ -375,6 +382,31 @@ void Frontend::updateTitle() {
     case TitleItem::Credits: screen_ = Screen::Credits; break;
     case TitleItem::Quit: quitRequested_ = true; break;
   }
+}
+
+void Frontend::secretTap() {
+  // src/menu.js #secretTitle. With no title to click, player 1's Alt button (R, X/Y, square/triangle) taps it.
+  if (profile_.unlocks.developer) { chooseCharacter(0, DEVELOPER); return; }
+  if (++secretTaps_ == 4) announce("Uma presença observa... mais três toques.", kMuted);
+  if (secretTaps_ < kSecretTaps) return;
+  profile_.unlocks.developer = true;
+  saveProfileNow();
+  chooseCharacter(0, DEVELOPER);
+  sfx(Sound::Chest);
+  announce("Easter egg descoberto: O Desenvolvedor despertou!", playerColor(DEVELOPER));
+}
+
+void Frontend::chooseCharacter(int slot, int character) {
+  if (!characterAvailable(profile_.unlocks, character) || characterTaken(slot, character)) return;
+  if (character_[static_cast<std::size_t>(slot)] != character) sfx(Sound::Click);
+  character_[static_cast<std::size_t>(slot)] = character;
+}
+
+void Frontend::recordVictory() {
+  // src/achievements.js: a Classic victory (offline or online) unlocks the Aurora Guardian for good.
+  if (options_.autoplay) return;
+  auroraEarned_ = arcana::recordVictory(profile_, state_);
+  if (auroraEarned_) saveProfileNow();
 }
 
 void Frontend::updateShop() {
@@ -426,11 +458,14 @@ void Frontend::setProfilePath(std::string path) {
   profile_ = loadProfile(profilePath_);
   const auto& prefs = profile_.prefs;
   character_ = prefs.characters;
+  // A locked character (hand-edited save) falls back to the slot's default mage.
+  for (int slot = 0; slot < cfg::MAX_PLAYERS; ++slot)
+    if (!characterAvailable(profile_.unlocks, character_[static_cast<std::size_t>(slot)])) character_[static_cast<std::size_t>(slot)] = slot;
   // Saves edited by hand (or from older versions) may repeat characters: keep them distinct.
   for (int slot = 1; slot < cfg::MAX_PLAYERS; ++slot)
     for (int other = 0; other < slot; ++other)
       if (character_[static_cast<std::size_t>(other)] == character_[static_cast<std::size_t>(slot)]) {
-        for (int c = 0; c < 4; ++c)
+        for (int c = 0; c < STANDARD_CHARACTERS; ++c)
           if (std::none_of(character_.begin(), character_.begin() + slot, [&](int used) { return used == c; })) { character_[static_cast<std::size_t>(slot)] = c; break; }
       }
   for (int i = 0; i < 3; ++i) if (prefs.campaign == kCampaigns[i].id) campaign_ = i;
@@ -452,11 +487,11 @@ bool Frontend::characterTaken(int slot, int character) const {
 }
 
 void Frontend::cycleCharacter(int slot, int direction, bool includeCurrent) {
-  // Like the web picker: characters in use by another local player are skipped.
+  // Like the web picker: characters in use by another local player, or still locked, are skipped.
   int& current = character_[static_cast<std::size_t>(slot)];
-  for (int step = includeCurrent ? 0 : 1; step < 4; ++step) {
-    const int candidate = ((current + direction * step) % 4 + 4) % 4;
-    if (characterTaken(slot, candidate)) continue;
+  for (int step = includeCurrent ? 0 : 1; step < CHARACTER_COUNT; ++step) {
+    const int candidate = ((current + direction * step) % CHARACTER_COUNT + CHARACTER_COUNT) % CHARACTER_COUNT;
+    if (!characterAvailable(profile_.unlocks, candidate) || characterTaken(slot, candidate)) continue;
     if (candidate != current) sfx(Sound::Click);
     current = candidate;
     return;
@@ -500,7 +535,7 @@ void Frontend::updatePlaying(double frameSeconds, const InputFrame& input) {
 
   if (state_.over) {
     overTime_ += frameSeconds;
-    if (overTime_ > 1.2) { screen_ = Screen::Over; pauseIndex_ = 0; depositRun(); }
+    if (overTime_ > 1.2) { screen_ = Screen::Over; pauseIndex_ = 0; recordVictory(); depositRun(); }
   } else {
     overTime_ = 0;
   }
@@ -600,6 +635,7 @@ void Frontend::setOnline(std::unique_ptr<OnlinePort> online) {
 bool Frontend::wantsTextInput() const { return screen_ == Screen::Online && online_ && online_->wantsText(); }
 
 void Frontend::enterOnline() {
+  profile_.prefs.characters = character_; // the online entry carries player 1's current pick
   screen_ = Screen::Online;
   online_->openMenu(profile_);
 }
@@ -665,7 +701,7 @@ void Frontend::updateOnlinePlaying(double frameSeconds, const InputFrame& input)
   if (online_->closed()) { leaveOnlineMatch(); return; }
   if (state_.over) {
     overTime_ += frameSeconds;
-    if (overTime_ > 1.2) { screen_ = Screen::Over; depositRun(); }
+    if (overTime_ > 1.2) { screen_ = Screen::Over; recordVictory(); depositRun(); }
   } else {
     overTime_ = 0;
   }
@@ -727,7 +763,7 @@ native::StaticVector<const Player*, cfg::MAX_PLAYERS> Frontend::hudPlayers() con
   }
   // Online: you first, then allies by character.
   list.push_back(find(localIds_[0]));
-  for (int c = 0; c < 4; ++c)
+  for (int c = 0; c < CHARACTER_COUNT; ++c)
     for (const auto& [id, p] : state_.players)
       if (id != localIds_[0] && p.color == c && !list.full()) list.push_back(&p);
   return list;
@@ -928,7 +964,6 @@ void Frontend::updateMusic() {
 }
 
 void Frontend::renderFeedback(BatchRenderer& b, float width, float height) {
-  const float s = uiScale(height);
   // Low-health pulse and hurt flash: red gradients creeping in from the screen edges.
   bool low = false;
   for (const auto& [_, p] : state_.players) if (p.alive && p.hp / std::max(1.0, p.maxHp) < 0.3) low = true;
@@ -942,6 +977,11 @@ void Frontend::renderFeedback(BatchRenderer& b, float width, float height) {
     b.rectGradient(0, 0, ew, height, red, clear, clear, red);
     b.rectGradient(width - ew, 0, ew, height, clear, red, red, clear);
   }
+  renderBanners(b, width, height);
+}
+
+void Frontend::renderBanners(BatchRenderer& b, float width, float height) {
+  const float s = uiScale(height);
   auto drawBanner = [&](const Banner& banner, float y, float px) {
     if (banner.age >= banner.life || banner.text.empty()) return;
     const float fadeIn = static_cast<float>(std::min<double>(1.0, banner.age / 0.2)), fadeOut = static_cast<float>(std::min<double>(1.0, (banner.life - banner.age) / 0.5));
@@ -1101,7 +1141,8 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
       case TitleItem::Campaign:
         b.text(mx + 20 * s, y + ty, "Ritual", 24 * s, color);
         value = kCampaigns[campaign_].title;
-        if (sel) hint = unlocked("endless") ? kCampaigns[campaign_].detail : "O Ritual infinito é desbloqueado no Grimório.";
+        if (sel) hint = campaign_ == 1 && !profile_.unlocks.aurora ? "6 fases de 5 minutos. Vença para libertar o Guardião da Aurora."
+                      : unlocked("endless") ? kCampaigns[campaign_].detail : "O Ritual infinito é desbloqueado no Grimório.";
         break;
       case TitleItem::Weapon:
         b.text(mx + 20 * s, y + ty, "Arma inicial", 24 * s, color);
@@ -1163,14 +1204,17 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
     }
     // Portrait bobbing like the web preview, flanked by the switch hints.
     const float bob = static_cast<float>(std::sin(menuTime_ * 3 + slot)) * 3 * s;
-    b.icon(static_cast<native::SpriteId>(c), sx, sy + 58 * s + bob, 84 * s);
+    b.icon(native::playerSprite(c), sx, sy + 58 * s + bob, 84 * s);
     b.text(sx - cw / 2 + 14 * s, sy + 44 * s, "<", 26 * s, color);
     b.text(sx + cw / 2 - 14 * s, sy + 44 * s, ">", 26 * s, color, Align::Right);
-    b.text(sx, sy + 96 * s, kCharacterNames[c], 22 * s, color, Align::Center);
-    b.text(sx, sy + 121 * s, kCharacterEffects[c], 14 * s, rgba(205, 212, 235), Align::Center);
+    // The unlockable characters have longer names: shrink a line rather than spill out of the card.
+    auto fitted = [&](const char* text, float px) { return std::min(px, px * (cw - 12 * s) / std::max(1.0f, b.textWidth(text, px))); };
+    b.text(sx, sy + 96 * s, kCharacterNames[c], fitted(kCharacterNames[c], 22 * s), color, Align::Center);
+    b.text(sx, sy + 121 * s, kCharacterEffects[c], fitted(kCharacterEffects[c], 14 * s), rgba(205, 212, 235), Align::Center);
     std::snprintf(scratch_, sizeof scratch_, "Especial: %s", slot == 0 && special_ ? kAltSpecials[c] : kCharacterSpecials[c]);
-    b.text(sx, sy + 140 * s, scratch_, 14 * s, kMuted, Align::Center);
+    b.text(sx, sy + 140 * s, scratch_, fitted(scratch_, 14 * s), kMuted, Align::Center);
   }
+  renderBanners(b, width, height);
 }
 
 void Frontend::renderSplash(BatchRenderer& b, float width, float height) {
@@ -1304,6 +1348,7 @@ void Frontend::renderOver(BatchRenderer& b, float width, float height) {
     b.text(width * 0.5f, y, scratch_, 22 * s, playerColor(p->color), Align::Center);
     y += 34 * s;
   }
+  if (auroraEarned_) b.text(width * 0.5f, y + 4 * s, "Guardião da Aurora desbloqueado! Escolha-o no menu.", 22 * s, playerColor(AURORA), Align::Center);
   if (!profilePath_.empty()) {
     std::snprintf(scratch_, sizeof scratch_, "+%d moedas guardadas no Grimório · total %d", earned_, profile_.coins);
     b.text(width * 0.5f, height * 0.72f, scratch_, 24 * s, kGold, Align::Center);

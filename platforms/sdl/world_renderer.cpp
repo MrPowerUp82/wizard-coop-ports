@@ -27,7 +27,8 @@ float easeOut(float t) { return 1 - (1 - t) * (1 - t) * (1 - t); }
 float fsin(float v) { return fastSin(v); }
 float fcos(float v) { return fastCos(v); }
 
-constexpr std::uint32_t kElements[4] = {hex(0x76dfff), hex(0xff9955), hex(0x92ed68), hex(0xc4a0ff)};
+// Element colours are the characters' tints (server/weapons.js SPELLS).
+std::uint32_t element(int color) { return native::playerColor(color); }
 
 struct Frame {
   BatchRenderer& b;
@@ -174,7 +175,7 @@ void drawRunesAndHazards(Frame& f) {
     const float x = static_cast<float>(rune.x), y = static_cast<float>(rune.y);
     if (!f.visible(x, y)) continue;
     const bool armed = rune.arm <= 0;
-    const std::uint32_t c = A(kElements[std::clamp(rune.color, 0, 3)], armed ? 0.85f : 0.35f);
+    const std::uint32_t c = A(element(rune.color), armed ? 0.85f : 0.35f);
     b.circle(x, y, 15 + (armed ? fsin(f.time * 8 + static_cast<double>(rune.id)) * 2 : 0), c, 2);
     b.beginPath();
     for (int n = 0; n < 5; ++n) {
@@ -254,7 +255,7 @@ void drawShotTrails(Frame& f) {
   for (const auto& s : f.game.shots) {
     const float x = static_cast<float>(s.x), y = static_cast<float>(s.y);
     if (!f.visible(x, y)) continue;
-    trail(f.b, x, y, static_cast<float>(s.vx), static_cast<float>(s.vy), s.special ? 95.0f : s.shard ? 25.0f : 58.0f, s.special, kElements[std::clamp(s.color, 0, 3)]);
+    trail(f.b, x, y, static_cast<float>(s.vx), static_cast<float>(s.vy), s.special ? 95.0f : s.shard ? 25.0f : 58.0f, s.special, element(s.color));
   }
   for (const auto& s : f.game.enemyShots) {
     const float x = static_cast<float>(s.x), y = static_cast<float>(s.y);
@@ -264,15 +265,14 @@ void drawShotTrails(Frame& f) {
 
 void drawShots(Frame& f) {
   auto& b = f.b;
-  static constexpr SpriteId sprites[4] = {SpriteId::Bolt, SpriteId::Fire, SpriteId::Thorn, SpriteId::Blade};
   for (const auto& s : f.game.shots) {
     const float x = static_cast<float>(s.x), y = static_cast<float>(s.y);
     if (!f.visible(x, y)) continue;
-    const int c = std::clamp(s.color, 0, 3);
+    const int c = std::clamp(s.color, 0, CHARACTER_COUNT - 1);
     const float spin = c == 3 ? f.time * 9 : 0;
     const float pulse = 1 + fsin(f.time * 15 + x * 0.05f) * 0.06f;
     const float size = (s.special ? 65.0f : s.shard ? 24.0f : c == 3 ? 52.0f : 38.0f) * (s.fullmoon && s.returning ? 1.35f : 1.0f);
-    b.sprite(sprites[c], x, y, size * pulse, static_cast<float>(std::atan2(s.vy, s.vx)) + spin);
+    b.sprite(native::shotSprite(c), x, y, size * pulse, static_cast<float>(std::atan2(s.vy, s.vx)) + spin);
   }
   for (const auto& s : f.game.enemyShots) {
     const float x = static_cast<float>(s.x), y = static_cast<float>(s.y);
@@ -354,8 +354,8 @@ void drawPlayers(Frame& f) {
   for (const auto& [_, p] : f.game.players) {
     const float x = static_cast<float>(p.x), y = static_cast<float>(p.y);
     if (!f.visible(x, y, 260)) continue;
-    const int c = std::clamp(p.color, 0, 3);
-    const std::uint32_t color = kElements[c];
+    const int c = std::clamp(p.color, 0, CHARACTER_COUNT - 1);
+    const std::uint32_t color = element(c);
     if (p.alive) {
       if (const int aura = rankOf(p, "aura")) {
         const bool sanctuary = rankOf(p, "sanctuary") > 0;
@@ -388,7 +388,21 @@ void drawPlayers(Frame& f) {
       }
     }
     b.ellipse(x, y + 24, 19, 6, rgba(0, 0, 0, static_cast<std::uint8_t>(pose.alpha * 0.24f * 255)));
-    b.sprite(static_cast<SpriteId>(c), x + pose.x, y + pose.y, 68, pose.rotation, pose.alpha, pose.sx, pose.sy, pose.flash);
+    b.sprite(native::playerSprite(c), x + pose.x, y + pose.y, 68, pose.rotation, pose.alpha, pose.sx, pose.sy, pose.flash);
+    if (p.alive && c == AURORA) b.ellipse(x, y - 34, 18, 6, A(color, 0.8f), 2); // solar halo
+    if (p.alive && c == DEVELOPER) {
+      // Rotating geometric sigils and the </> mark (src/render.js).
+      for (int square = 0; square < 2; ++square) {
+        const float half = square ? 29.0f : 35.0f, rot = f.time * 0.7f + (square ? static_cast<float>(PI) / 4 : 0.0f);
+        b.beginPath();
+        for (int corner = 0; corner < 4; ++corner) {
+          const float a = rot + static_cast<float>(PI) / 4 + corner * HALF_PI, d = half * static_cast<float>(std::sqrt(2.0));
+          b.lineTo(x + fcos(a) * d, y + fsin(a) * d);
+        }
+        b.stroke(1.5f, A(color, 0.7f), true);
+      }
+      b.textOutlined(x, y - 72 - (f.textScale - 1) * 10, "</>", 13 * f.textScale, color, rgba(6, 10, 14, 170), Align::Center);
+    }
     if (p.alive) {
       if (const int orbit = std::clamp(rankOf(p, "orbit"), 0, 5)) {
         static constexpr int counts[5] = {1, 2, 2, 3, 3};
@@ -518,6 +532,36 @@ void drawEffectsNormal(Frame& f) {
         } else if (fx.shape == MoteShape::Smoke) {
           b.circle(fx.x, fx.y, r * (0.6f + progress * 0.8f), A(fx.color, fade * 0.5f));
         }
+        break;
+      }
+      case FxKind::Aurora: {
+        const float radius = 20 + easeOut(progress) * fx.radius, width = 3 * fade + 1;
+        const float inner = radius * (fx.seed > 0 ? 0.45f : 0.7f); // Coroa da aurora: longer rays
+        const std::uint32_t c = A(fx.color, fade);
+        b.circle(fx.x, fx.y, radius * 0.6f, c, width);
+        for (int n = 0; n < 12; ++n) {
+          const float a = n * TAU / 12;
+          b.line(fx.x + fcos(a) * inner, fx.y + fsin(a) * inner, fx.x + fcos(a) * radius, fx.y + fsin(a) * radius, width, c);
+        }
+        break;
+      }
+      case FxKind::SystemReset: {
+        // A rectangular scan grid and collapsing brackets contrast with the cyan radial blast.
+        const float r = fx.radius;
+        const std::uint32_t grid = A(fx.color, fade * 0.25f);
+        for (float offset = -r; offset <= r; offset += 100) {
+          b.line(fx.x + offset, fx.y - r, fx.x + offset, fx.y + r, 1, grid);
+          b.line(fx.x - r, fx.y + offset, fx.x + r, fx.y + offset, 1, grid);
+        }
+        b.rect(fx.x - r, fx.y - r + progress * r * 2, r * 2, 6, A(fx.color, fade * 0.8f));
+        const float edge = 45 + (1 - easeOut(progress)) * 300;
+        for (float side : {-1.0f, 1.0f}) {
+          b.beginPath();
+          b.lineTo(fx.x + side * (edge - 24), fx.y - edge); b.lineTo(fx.x + side * edge, fx.y - edge);
+          b.lineTo(fx.x + side * edge, fx.y + edge); b.lineTo(fx.x + side * (edge - 24), fx.y + edge);
+          b.stroke(4, A(fx.color, fade));
+        }
+        b.textOutlined(fx.x, fx.y - 80, "RESTAURAÇÃO DO SISTEMA", 16, A(fx.color, fade), A(rgba(10, 10, 16), fade * 0.8f), Align::Center);
         break;
       }
       case FxKind::Ascend: {
@@ -721,7 +765,7 @@ void edgeArrow(BatchRenderer& b, const WorldView& v, float worldX, float worldY,
 
 } // namespace
 
-std::uint32_t elementColor(int color, std::uint8_t alpha) { return native::withAlpha(kElements[std::clamp(color, 0, 3)], alpha); }
+std::uint32_t elementColor(int color, std::uint8_t alpha) { return native::playerColor(color, alpha); }
 
 void drawWorld(BatchRenderer& b, const GameState& game, const Animator& anim, const WorldView& v) {
   const float zoom = v.zoom;

@@ -31,8 +31,9 @@ fechar o jogo ou acabar a bateria no meio não corrompe o progresso, e reinstala
   personagem, ritual e maldições, entrada com a partida em andamento e reconexão automática.
   Sinais para os aliados: Q (venham aqui), E (ajuda), X (cuidado), C (olhem ali); no controle,
   segure X/Y e aperte uma direção.
-- **Quatro personagens** (Azul, Vermelho, Verde e Roxo), cada um com o próprio tiro e especial; no
-  co-op ninguém repete personagem.
+- **Quatro personagens** (Azul, Vermelho, Verde e Roxo), cada um com o próprio tiro e especial, e
+  **dois desbloqueáveis** (O Desenvolvedor e o Guardião da Aurora, abaixo); no co-op ninguém repete
+  personagem.
 - **Grimório (meta-progressão):** as moedas de cada partida compram os 15 upgrades permanentes do
   jogo web, incluindo os desbloqueios Arsenal (arma inicial), Segundo feitiço (especial alternativo)
   e Ritual infinito. Dá para redistribuir tudo e receber as moedas de volta.
@@ -40,6 +41,39 @@ fechar o jogo ou acabar a bateria no meio não corrompe o progresso, e reinstala
   especial, raios, familiar, números de dano, tremor e flash de tela, avisos de eventos.
 - **Áudio sintetizado** como no navegador: 31 efeitos e trilha generativa que muda com o momento da
   partida (menu, horda, guardião, fúria, vitória, derrota). Nenhum arquivo de áudio.
+
+### Personagem secreto: O Desenvolvedor
+
+Na tela de título, aperte **sete vezes** o botão de trocar opções do Jogador 1 (R no teclado, X/Y no
+controle, □/△ no Vita e no PSP). O Desenvolvedor entra na seleção de personagem e o desbloqueio fica
+salvo no `profile.ini` (`unlock.developer=1`).
+
+Ele tem 5× de vida, 4× de dano, ataques duas vezes mais rápidos, três projéteis iniciais, +35% de
+velocidade e 12 de armadura. **Código-fonte** atravessa até seis alvos, desacelera e explode em área.
+O visual é um mago ciano com sigilos geométricos girando ao redor e a marca `</>`.
+
+**Reescrever realidade** solta uma onda ciano que atinge inimigos em um raio de 600 unidades com 24× o
+dano, apaga projéteis nesse raio, cura 50% da vida máxima e protege por 3 s. A carga se regenera em
+10 s, além dos cristais. Com *Segundo feitiço*, **Restauração do sistema** faz uma varredura magenta
+que elimina todos os inimigos presentes no mapa no instante da ativação, incluindo elites e chefes,
+com abates, dano, drops e progressão de fase normais; inimigos que surgirem depois não são afetados.
+Também cura aliados vivos em até 600 unidades em 100% e protege por 5 s. Maldições que reduzem cura
+continuam valendo.
+
+### Recompensa do Clássico: Guardião da Aurora
+
+Vença os seis reinos no **Ritual clássico**, solo, co-op local ou online, para desbloquear o
+**Guardião da Aurora** para sempre (`unlock.aurora=1`). A tela de resultado anuncia a recompensa e o
+personagem entra na seleção na hora. Derrotas, abandonos e os rituais rápido e infinito não contam.
+
+O Guardião usa vestes douradas e uma auréola solar. Tem **150 de vida, +35% de dano, +10% de
+velocidade, 3 de armadura e intervalo de ataque 15% menor**, antes das melhorias do Grimório. A
+**Lança da aurora** atravessa dois alvos. **Alvorada** causa 6× de dano em 300 unidades, apaga
+projéteis nesse raio e protege por 1,5 s. Com *Segundo feitiço*, **Coroa da aurora** dispara 12
+lanças radiais com 3× de dano. Os especiais carregam com cristais normalmente.
+
+Online, os dois funcionam com quem joga no navegador: o servidor só aceita o Guardião de quem
+informa a vitória no Clássico, como na versão web.
 
 ## Controles
 
@@ -115,6 +149,7 @@ mostrar a saída) tem opções para testar sem controle e sem tela:
 ./arcana_desktop --autoplay 4 --perf                       # 4 bots jogando, overlay de desempenho
 ./arcana_desktop --autoplay 2 --charged --frames 1800 \
                  --shots-every 20 --screenshot shots/s.png # capturas em série (headless)
+./arcana_desktop --autoplay 2 --charged --characters 4,5  # bots com o Desenvolvedor e o Guardião
 ./arcana_desktop --psp                                     # prévia do PSP: 480x272, UI compacta
 ./arcana_desktop --open-shop --profile teste.ini           # abre direto no Grimório com outro save
 ./arcana_desktop --audio-demo demo.wav                     # grava todos os sons e músicas num WAV
@@ -130,9 +165,10 @@ contínuos).
 O servidor padrão é `wss://vps65228.publiccloud.com.br/ws`; `pref.server=` no `profile.ini` troca o
 padrão e `--server` tem prioridade. Sem TLS (`ws://`) só para `localhost`, ou com `--insecure-ws`.
 
-Testes (`ctest`): `core` (regras da simulação), `native_hotpath` (zero alocações por frame depois do
+Testes (`ctest`): `core` (regras da simulação), `characters` (Desenvolvedor e Guardião da Aurora:
+atributos, especiais, desbloqueios), `native_hotpath` (zero alocações por frame depois do
 aquecimento), `frontend` (seleção de personagem, trigonometria visual), `meta` (save, loja, bônus,
-depósito de moedas e redistribuição) e `online_*` (protocolo contra fixtures geradas pelo meu-game,
+depósito de moedas, redistribuição, segredo do título e recompensa do Clássico) e `online_*` (protocolo contra fixtures geradas pelo meu-game,
 mensagens, interpolação/predição, sessão/reconexão, entrada de texto, telas online); o alvo
 `online-e2e` do `build-all.sh` roda o teste ponta a ponta com o servidor de verdade.
 

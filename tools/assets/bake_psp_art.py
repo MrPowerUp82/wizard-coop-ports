@@ -10,7 +10,7 @@ OUT = ROOT / 'platforms' / 'psp' / 'sdl'
 atlas = Image.open(ASSETS / 'native_atlas_128.png').convert('RGBA')
 tiles = Image.open(ASSETS / 'terrain_tiles.png').convert('RGBA')
 font_path = ASSETS / 'fonts' / 'DejaVuSans-Bold.ttf'
-CELL, COLS = 128, 6
+CELL, COLS = 128, 7  # arcana::native::kAtlasColumns
 GOLD = (255, 214, 110, 255)
 
 

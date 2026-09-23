@@ -94,6 +94,7 @@ struct FrontendOptions {
   bool splash{true};    // developer seal before the title (never with autoplay/startImmediately/openShop)
   bool openCredits{};   // dev/screenshots: start on the credits screen
   bool startOnline{};   // open the online pages right away (--online-bot)
+  std::array<int, cfg::MAX_PLAYERS> characters{0, 1, 2, 3}; // dev/screenshots: autoplay/--play picks (--characters)
   ButtonLabels buttons{};
 };
 
@@ -154,6 +155,9 @@ private:
   void cycleCampaign();
   bool characterTaken(int slot, int character) const;
   void cycleCharacter(int slot, int direction, bool includeCurrent = false);
+  void chooseCharacter(int slot, int character);  // no-op when locked or taken
+  void secretTap();                               // the Developer easter egg on the title
+  void recordVictory();                           // Classic victory -> Aurora Guardian
   void updatePlaying(double frameSeconds, const InputFrame& input);
   void updatePaused();
   void updateOver();
@@ -166,6 +170,7 @@ private:
 
   void renderWorld(BatchRenderer& batch, float width, float height);
   void renderFeedback(BatchRenderer& batch, float width, float height);
+  void renderBanners(BatchRenderer& batch, float width, float height);
   void observeEvents();
   void updateMusic();
   void playEventSound(const Event& e);
@@ -220,6 +225,8 @@ private:
   int special_{};            // Segundo feitiço loadout (P1)
   bool deposited_{};
   int earned_{};
+  bool auroraEarned_{};      // this run's result unlocked the Aurora Guardian
+  int secretTaps_{};         // Alt presses on the title toward the Developer
   int shopIndex_{};
   bool respecArmed_{};
   bool quitRequested_{};

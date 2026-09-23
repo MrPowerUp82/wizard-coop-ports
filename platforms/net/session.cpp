@@ -77,7 +77,7 @@ void Session::receive(ServerMessage& m, double now) {
     case ServerKind::Error:
       if (m.error.code == "CHARACTER_TAKEN" && playerId_.empty()) {
         // Like the web client: pick a character nobody in the room uses and ask again.
-        for (int c = 0; c < 4; ++c) {
+        for (int c = 0; c < STANDARD_CHARACTERS; ++c) { // never a secret: it may not be unlocked
           const bool taken = std::any_of(m.error.players.begin(), m.error.players.end(), [&](const LobbyPlayer& p) { return p.color == c; });
           if (taken) continue;
           config_.entry.color = c;
