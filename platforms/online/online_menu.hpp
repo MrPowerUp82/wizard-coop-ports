@@ -83,6 +83,7 @@ private:
   int campaign_{};
   std::array<bool, 6> curses_{};
   bool endlessUnlocked_{};
+  Unlocks unlocks_{};  // which secret characters the lobby may cycle to
   double botNextTry_{};
 };
 

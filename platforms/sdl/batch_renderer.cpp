@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <string>
 
 namespace arcana::sdl {
 namespace {
@@ -60,7 +62,9 @@ bool BatchRenderer::init(SDL_Renderer* renderer, SDL_Surface* atlas, int cell, i
   const int terrainH = terrain ? terrain->h : 0;
   const int spriteColumns = compact ? atlas->w : atlas->w * 2; // atlas (+ silhouettes)
   const int width = compact ? 512 : nextPow2(atlas->w * 2 + 256), height = compact ? 512 : nextPow2(atlas->h + terrainH);
-  if (compact && (atlas->w + 96 > width || atlas->h + terrainH + 64 > height)) { error = "atlas too large for a 512x512 page"; return false; }
+  // Compact: the free space left of the 512x512 page must hold the white texel, the glow and every
+  // glyph; the glyph loop below reports a shortfall instead of dropping letters silently.
+  if (compact && (atlas->w > width || atlas->h + terrainH > height)) { error = "atlas too large for a 512x512 page"; return false; }
   SDL_Surface* sheet = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ABGR8888);
   if (!sheet) { error = SDL_GetError(); return false; }
   SDL_FillRect(sheet, nullptr, 0);
@@ -123,8 +127,11 @@ bool BatchRenderer::init(SDL_Renderer* renderer, SDL_Surface* atlas, int cell, i
 
   fontHeight_ = static_cast<float>(TTF_FontHeight(font));
   const SDL_Color white{255, 255, 255, 255};
+  // The compact page only has room for what the Portuguese UI writes (PC also shows typed names).
+  static constexpr char kCompactLatin1[] = "\xB7\xA9\xD7\xC1\xC0\xC2\xC3\xC7\xC9\xCA\xCD\xD3\xD4\xD5\xDA\xDC\xE1\xE0\xE2\xE3\xE7\xE9\xEA\xED\xF3\xF4\xF5\xFA\xFC";
   for (std::uint32_t cp = 32; cp < 256; ++cp) {
     if (cp >= 127 && cp < 160) continue;
+    if (compact && cp >= 160 && !std::strchr(kCompactLatin1, static_cast<char>(cp))) continue;
     if (!TTF_GlyphIsProvided(font, static_cast<Uint16>(cp))) continue;
     int minx, maxx, miny, maxy, advance;
     if (TTF_GlyphMetrics(font, static_cast<Uint16>(cp), &minx, &maxx, &miny, &maxy, &advance) != 0) continue;
@@ -140,6 +147,10 @@ bool BatchRenderer::init(SDL_Renderer* renderer, SDL_Surface* atlas, int cell, i
       g.uv = uv(static_cast<float>(dst.x), static_cast<float>(dst.y), static_cast<float>(dst.w), static_cast<float>(dst.h), 0);
       g.w = static_cast<float>(dst.w); g.h = static_cast<float>(dst.h);
       g.valid = true;
+    } else if (compact) {
+      error = "no room for glyph " + std::to_string(cp);
+      SDL_FreeSurface(bitmap); SDL_FreeSurface(sheet);
+      return false;
     }
     SDL_FreeSurface(bitmap);
   }

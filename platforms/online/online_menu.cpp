@@ -28,7 +28,7 @@ constexpr CurseText kCurses[6] = {
   {"tyrant", "Tirania", "Guardiões com 40% mais vida"},
   {"nobility", "Nobreza sombria", "Cada chamado de elite traz duas elites"},
 };
-constexpr const char* kCharacterNames[4] = {"Azul", "Vermelho", "Verde", "Roxo"};
+constexpr const char* kCharacterNames[CHARACTER_COUNT] = {"Azul", "Vermelho", "Verde", "Roxo", "O Desenvolvedor", "Guardião da Aurora"};
 constexpr int kMaxRoomRows = 6;
 constexpr int kCreateRows = 10; // visibility, ritual, 6 curses, create, back
 
@@ -65,6 +65,7 @@ void OnlineMenu::openMenu(const Profile& profile) {
   if (check == UrlCheck::InsecureBlocked) message_ = "Conexões sem TLS (ws://) só são permitidas para localhost. Use --insecure-ws para testes.";
   rooms_ = urlOk_ ? std::make_unique<RoomList>(url_, config_.transport) : nullptr;
   endlessUnlocked_ = rankOf(profile, "endless") > 0;
+  unlocks_ = profile.unlocks;
   name_ = profile.prefs.name;
   campaign_ = 0;
   for (int i = 0; i < 3; ++i) if (profile.prefs.campaign == kCampaignIds[i]) campaign_ = i;
@@ -77,7 +78,8 @@ void OnlineMenu::openMenu(const Profile& profile) {
 EntryRequest OnlineMenu::baseEntry(const Profile& profile) const {
   EntryRequest e;
   e.name = profile.prefs.name.empty() ? "Arcanista" : profile.prefs.name;
-  e.color = profile.prefs.characters[0];
+  e.color = characterAvailable(profile.unlocks, profile.prefs.characters[0]) ? profile.prefs.characters[0] : 0;
+  e.auroraUnlocked = profile.unlocks.aurora;
   e.campaign = profile.prefs.campaign;
   e.meta = profile.upgrades;
   e.loadout.weapon = rankOf(profile, "arsenal") > 0 ? profile.prefs.weapon : "";
@@ -241,10 +243,11 @@ MenuResult OnlineMenu::updateSession(std::uint32_t pressed) {
   if (is(pressed, sdl::ActUp)) index_ = wrap(index_ - 1, rows);
   if (is(pressed, sdl::ActDown)) index_ = wrap(index_ + 1, rows);
   if (is(pressed, sdl::ActLeft) || is(pressed, sdl::ActRight)) {
-    // Next character nobody else in the room uses.
+    // Next unlocked character nobody else in the room uses.
     const int dir = is(pressed, sdl::ActLeft) ? -1 : 1;
-    for (int step = 1; step < 4; ++step) {
-      const int c = wrap(session_->color() + dir * step, 4);
+    for (int step = 1; step < CHARACTER_COUNT; ++step) {
+      const int c = wrap(session_->color() + dir * step, CHARACTER_COUNT);
+      if (!characterAvailable(unlocks_, c)) continue;
       const auto& players = session_->lobby().players;
       const bool taken = std::any_of(players.begin(), players.end(), [&](const LobbyPlayer& p) { return p.color == c && p.id != session_->playerId(); });
       if (!taken) { session_->selectCharacter(c); break; }
@@ -405,13 +408,13 @@ void OnlineMenu::renderLobby(sdl::BatchRenderer& b, float width, float height, f
   for (const auto& p : lobby.players) {
     b.rect(x, y, w, 40 * s, kPanel);
     b.rect(x, y, 6 * s, 40 * s, native::playerColor(p.color));
-    std::snprintf(line, sizeof line, "%s (%s)%s%s%s", p.name.c_str(), kCharacterNames[std::clamp(p.color, 0, 3)],
+    std::snprintf(line, sizeof line, "%s (%s)%s%s%s", p.name.c_str(), kCharacterNames[std::clamp(p.color, 0, CHARACTER_COUNT - 1)],
                   p.id == lobby.hostId ? " · anfitrião" : "", p.id == session_->playerId() ? " · você" : "", p.connected ? "" : " · desconectado");
     b.text(x + 20 * s, y + 8 * s, line, 20 * s, p.connected ? kText : kMuted);
     y += 46 * s;
   }
   y += 12 * s;
-  row(b, x, y, w, s, index_ == 0, "Personagem", kCharacterNames[std::clamp(session_->color(), 0, 3)]);
+  row(b, x, y, w, s, index_ == 0, "Personagem", kCharacterNames[std::clamp(session_->color(), 0, CHARACTER_COUNT - 1)]);
   y += 48 * s;
   row(b, x, y, w, s, index_ == 1, session_->isHost() ? "Iniciar partida" : "Aguardando o anfitrião iniciar");
   y += 48 * s;

@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
   TTF_Font* font = TTF_OpenFont((assetsDir + "assets/fonts/DejaVuSans-Bold.ttf").c_str(), 18);
   BatchRenderer batch;
   std::string error;
-  if (!renderer || !atlas || !font || !batch.init(renderer, atlas, atlas->w / 6, 6, terrain, font, error, true)) {
+  if (!renderer || !atlas || !font || !batch.init(renderer, atlas, atlas->w / native::kAtlasColumns, native::kAtlasColumns, terrain, font, error, true)) {
     SDL_Log("Arcana init failed: %s %s", SDL_GetError(), error.c_str());
     SDL_Quit();
     return 1;

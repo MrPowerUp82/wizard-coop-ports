@@ -15,8 +15,7 @@ using native::rgba;
 constexpr std::uint32_t hex(std::uint32_t rgb, std::uint8_t a = 255) {
   return rgba(static_cast<std::uint8_t>(rgb >> 16), static_cast<std::uint8_t>(rgb >> 8), static_cast<std::uint8_t>(rgb), a);
 }
-constexpr std::uint32_t kElement[4] = {hex(0x76dfff), hex(0xff9955), hex(0x92ed68), hex(0xc4a0ff)};
-std::uint32_t element(int c) { return kElement[std::clamp(c, 0, 3)]; }
+std::uint32_t element(int c) { return native::playerColor(c); }
 
 float sign(float v) { return v > 0 ? 1.0f : v < 0 ? -1.0f : 0.0f; }
 
@@ -175,8 +174,27 @@ void Animator::altSpecial(const Event& e, float seed) {
 
 void Animator::special(const Event& e) {
   const float seed = static_cast<float>(e.id) * 7.31f;
-  if (e.variant == 1) { altSpecial(e, seed); return; }
   const float x = static_cast<float>(e.x), y = static_cast<float>(e.y);
+  if (e.color == AURORA) {
+    // Alvorada's solar burst, or the tighter crown of Coroa da aurora (seed = variant).
+    if (Effect* fx = push(FxKind::Aurora, x, y, 0.9f, true)) { fx->color = hex(0xffd778); fx->radius = e.variant == 1 ? 160 : 300; fx->seed = static_cast<float>(e.variant); }
+    motes(x, y, MoteShape::Star, hex(0xffe8aa), 16, 220, 25, 0.8f, 0, 5, 2);
+    return;
+  }
+  if (e.color == DEVELOPER) {
+    if (e.variant == 1) {
+      // Restauração do sistema: a magenta scan across the whole view, unlike the cyan radial wave.
+      if (Effect* fx = push(FxKind::SystemReset, x, y, 1.1f, true)) { fx->color = hex(0xff638f); fx->radius = 1200; }
+      motes(x, y, MoteShape::Star, hex(0xff638f), 24, -240, 300, 0.9f, 0, 8, 2);
+      setFlash(hex(0xff638f), 0.16f, 0.3f);
+      shake(6);
+    } else {
+      if (Effect* fx = push(FxKind::Ring, x, y, 0.8f, true)) { fx->color = hex(0x73ffe4); fx->radius = 600; }
+      motes(x, y, MoteShape::Star, hex(0x73ffe4), 24, 400, 60, 1, 0, 7, 2);
+    }
+    return;
+  }
+  if (e.variant == 1) { altSpecial(e, seed); return; }
   if (e.color == 0) {
     if (Effect* fx = push(FxKind::Nova, x, y, 0.9f, true)) { fx->radius = 280; fx->seed = seed; }
     motes(x, y, MoteShape::Flake, hex(0xe8fbff), 26, 330, 0, 1, 0, 7, 2.6f);
@@ -264,7 +282,7 @@ void Animator::handleEvent(const Event& e) {
     shake(18);
     freeze_ = 0.22f;
   } else if (k == "special") {
-    burst(x, y, element(e.color), 16, 120);
+    if (e.color != DEVELOPER || e.variant != 1) burst(x, y, element(e.color), 16, 120);
     special(e);
   } else if (k == "elite" || k == "chest" || k == "revive" || k == "phoenix" || k == "magnet") {
     const std::uint32_t color = k == "elite" ? hex(0xffd36b) : k == "chest" ? hex(0xffe08a) : k == "magnet" ? hex(0x8fd8ff)
@@ -290,7 +308,7 @@ void Animator::track(const GameState& game, const Player* player, const Enemy* e
     if (player) {
       a.color = element(player->color); a.character = player->color; a.castCount = player->castCount;
       a.charge = player->specialCharge; a.level = player->level; a.dashFor = player->dashFor;
-      a.sprite = static_cast<native::SpriteId>(std::clamp(player->color, 0, 3)); a.size = 68;
+      a.sprite = native::playerSprite(player->color); a.size = 68;
     } else {
       a.boss = enemy->boss; a.elite = enemy->elite;
       a.color = enemy->elite ? hex(0xffd36b) : hex(0xffbc86);

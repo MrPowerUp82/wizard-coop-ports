@@ -107,7 +107,13 @@ Vec2 dashDirection(const Player& p,Vec2 in){real l=std::hypot(in.x,in.y);if(l>.0
 Vec2 movementDelta(const Player& p,real dt){real burst=std::min(dt,std::max(0.0,p.dashFor));return {(p.dashX)*cfg::DASH_SPEED*burst+p.input.x*p.speed*(dt-burst),(p.dashY)*cfg::DASH_SPEED*burst+p.input.y*p.speed*(dt-burst)};}
 
 struct Spell { real speed,radius; int pierce; bool slow; real splash; };
-const std::array<Spell,4> SPELLS={Spell{490,29,1,true,0},Spell{430,29,1,false,75},Spell{560,29,3,false,0},Spell{400,48,2,false,0}};
+// server/weapons.js SPELLS: ... Código-fonte (Developer), Lança da aurora (Aurora Guardian).
+const std::array<Spell,CHARACTER_COUNT> SPELLS={Spell{490,29,1,true,0},Spell{430,29,1,false,75},Spell{560,29,3,false,0},Spell{400,48,2,false,0},Spell{620,38,6,true,95},Spell{530,32,2,false,0}};
+struct CharacterStats { real hp,damage,speed,attackDelay,armor; int projectiles; };
+const CharacterStats& statsOf(int color){
+  static constexpr CharacterStats standard{1,1,1,1,0,0},developer{5,4,1.35,.5,12,2},aurora{1.5,1.35,1.1,.85,3,0};
+  return color==DEVELOPER?developer:color==AURORA?aurora:standard;
+}
 Shot playerShot(const Player& p,real angle,bool special=false){const auto& sp=SPELLS[p.color];Shot sh;sh.x=p.x;sh.y=p.y;sh.vx=std::cos(angle)*sp.speed;sh.vy=std::sin(angle)*sp.speed;sh.ttl=special?2:1.55;sh.damage=p.damage*(special?3:1);sh.color=p.color;sh.special=special;sh.pierce=sp.pierce;sh.owner=p.id;if(!special&&p.color==3&&rankOf(p,"boomerang")){sh.boomerang=true;sh.fullmoon=rankOf(p,"fullmoon");}if(!special&&p.color==2&&rankOf(p,"bramble")){sh.pierce+=2;sh.damage*=1.15;}return sh;}
 
 } // namespace
@@ -117,7 +123,14 @@ real SeededRandom::next(){a_+=0x6d2b79f5u;std::uint32_t t=a_;t=(t^(t>>15))*(t|1u
 int rankOf(const Player& p,const std::string& id){auto it=p.powers.find(id);return it==p.powers.end()?0:it->second;}
 int xpNeeded(int level){return static_cast<int>(std::floor((5+level*3+level*level*.65)*1.2));}
 GameState createGameState(std::string campaign,std::vector<std::string> curses){GameState s;s.enemies.reserve(cfg::MAX_ENEMIES);s.shots.reserve(cfg::MAX_SHOTS);s.enemyShots.reserve(cfg::MAX_ENEMY_SHOTS);s.gems.reserve(cfg::MAX_DROPS);s.hazards.reserve(cfg::MAX_HAZARDS);s.runes.reserve(cfg::MAX_RUNES);s.zones.reserve(cfg::MAX_ZONES);s.events.reserve(64);s.campaign=(campaign=="quick"||campaign=="endless")?campaign:"classic";static const std::unordered_set<std::string> valid={"swarm","frenzy","brittle","famine","tyrant","nobility"};for(auto& c:curses)if(valid.contains(c)&&std::find(s.curses.begin(),s.curses.end(),c)==s.curses.end())s.curses.push_back(c);return s;}
-Player createPlayer(std::string id,std::string name,int color,const MetaRanks* meta,const Loadout* loadout){Player p;p.id=std::move(id);p.name=std::move(name);p.color=std::clamp(color,0,3);p.x=p.color*55.0;if(meta||loadout){MetaRanks empty;applyMeta(p,meta?*meta:empty,loadout);}return p;}
+Player createPlayer(std::string id,std::string name,int color,const MetaRanks* meta,const Loadout* loadout){Player p;p.id=std::move(id);p.name=std::move(name);if(meta||loadout){MetaRanks empty;applyMeta(p,meta?*meta:empty,loadout);}selectPlayerCharacter(p,color);return p;}
+void selectPlayerCharacter(Player& p,int color){
+  color=std::clamp(color,0,CHARACTER_COUNT-1);
+  const auto& before=statsOf(p.color);const auto& after=statsOf(color);
+  if(&before!=&after){p.hp*=after.hp/before.hp;p.maxHp*=after.hp/before.hp;p.damage*=after.damage/before.damage;p.speed*=after.speed/before.speed;p.attackDelay*=after.attackDelay/before.attackDelay;p.armor+=after.armor-before.armor;p.projectiles+=after.projectiles-before.projectiles;}
+  p.color=color;p.x=color*55.0;
+}
+bool earnsAurora(const GameState& s){return s.over&&s.victory&&s.campaign=="classic"&&s.phase==5;}
 void addLatePlayer(GameState& s,Player player){Player* anchor=nullptr;real avg=0;for(auto& [_,p]:s.players){if(!anchor||(p.alive&&!anchor->alive))anchor=&p;avg+=p.level;}if(anchor){player.x=anchor->x+60;player.y=anchor->y+20;}int target=s.players.empty()?1:std::max(1,static_cast<int>(std::floor(avg/s.players.size()*.8)));for(int l=1;l<target;l++)player.xp+=xpNeeded(l);player.invulnerableFor=3;s.players[player.id]=std::move(player);}
 
 std::vector<std::string> availablePowers(const Player& p,Random& rnd,bool coop,const std::vector<std::string>& exclude){
@@ -150,6 +163,25 @@ void castAltSpecial(GameState& s,Player& p,Random& rnd,Event& ev){
   else {Enemy* t=nearestEnemy(s,{p.x,p.y},450);auto d=dashDirection(p,{p.input.x,p.input.y});real x=t?t->x:p.x+d.x*200,y=t?t->y:p.y+d.y*200;Zone z;z.x=x;z.y=y;z.radius=230;z.ttl=2.2;z.kind="vortex";z.dps=p.damage;z.pull=260;z.damage=p.damage*8;z.owner=p.id;z.color=3;addZone(s,z);ev.x=x;ev.y=y;}
 }
 
+// Reescrever realidade / Restauração do sistema. The reset snapshots its targets: enemies spawned by
+// these kills (slimelets) or later are not part of it.
+void castDeveloper(GameState& s,Player& p,Random& rnd,bool alt){
+  constexpr real reach=600.0*600.0;
+  retain(s.enemyShots,[&](const EnemyShot& sh){return distanceSq({p.x,p.y},{sh.x,sh.y})>reach;});
+  const std::size_t targets=s.enemies.size();
+  for(std::size_t i=0;i<targets;++i){auto& e=s.enemies[i];if(e.hp>0&&(alt||distanceSq({p.x,p.y},{e.x,e.y})<=reach))damageEnemy(s,e,alt?e.hp:p.damage*24,rnd,&p,!alt,false,"","special");}
+  for(auto& [_,a]:s.players)if(a.alive&&(alt?distanceSq({p.x,p.y},{a.x,a.y})<=reach:&a==&p)){a.hp=std::min(a.maxHp,a.hp+a.maxHp*(alt?1:.5)*healingScale(s));a.invulnerableFor=std::max(a.invulnerableFor,alt?5.0:3.0);}
+}
+// Alvorada / Coroa da aurora.
+void castAurora(GameState& s,Player& p,Random& rnd,bool alt){
+  if(alt){for(int n=0;n<12;n++)s.shots.push_back(playerShot(p,n*PI/6,true));return;}
+  constexpr real reach=300.0*300.0;
+  const std::size_t targets=s.enemies.size();
+  for(std::size_t i=0;i<targets;++i){auto& e=s.enemies[i];if(e.hp>0&&distanceSq({p.x,p.y},{e.x,e.y})<=reach)damageEnemy(s,e,p.damage*6,rnd,&p,false,false,"","special");}
+  retain(s.enemyShots,[&](const EnemyShot& sh){return distanceSq({p.x,p.y},{sh.x,sh.y})>reach;});
+  p.invulnerableFor=std::max(p.invulnerableFor,1.5);
+}
+
 void addBurnZone(GameState& s,Player& p,real x,real y){real radius=rankOf(p,"hellfire")?80:55,ttl=rankOf(p,"hellfire")?3:2,dps=p.damage*(rankOf(p,"hellfire")?.75:.5);for(auto& z:s.zones)if(z.owner==p.id&&distanceSq({z.x,z.y},{x,y})<900){z.ttl=ttl;return;}Zone z;z.x=x;z.y=y;z.radius=radius;z.ttl=ttl;z.dps=dps;z.kind="burn";z.owner=p.id;z.color=1;addZone(s,z);}
 
 void updatePlayerAttacks(GameState& s,const PlayerList& alive){if(s.enemies.empty())return;for(Player* p:alive){if(!p->pendingPowers.empty()||p->attackCooldown>0)continue;Enemy* t=nearestEnemy(s,{p->x,p->y},900);if(!t)continue;int bond=0;for(auto* q:alive)if(distanceSq({p->x,p->y},{q->x,q->y})<240.0*240.0||p==q)bond=std::max(bond,rankOf(*q,"bond"));p->attackCooldown=p->attackDelay*(1-bond*.08);real base=std::atan2(t->y-p->y,t->x-p->x);if(s.shots.size()<MAX_SHOTS){++p->castCount;p->castAngle=base;}for(int n=0;n<p->projectiles&&s.shots.size()<MAX_SHOTS;n++)s.shots.push_back(playerShot(*p,base+(n-(p->projectiles-1)/2.0)*.16));}}
@@ -163,7 +195,7 @@ void updateShots(GameState& s,real dt,Random& rnd,EnemyGrid& enemyGrid){
       auto it=s.players.find(sh.owner);
       if(it!=s.players.end()) owner=&it->second;
     }
-    const auto& sp=SPELLS[std::clamp(sh.color,0,3)];
+    const auto& sp=SPELLS[std::clamp(sh.color,0,CHARACTER_COUNT-1)];
     if(sh.boomerang&&owner&&owner->alive){
       if(!sh.returning&&sh.ttl<=.8){
         sh.returning=true;
@@ -224,8 +256,8 @@ void updateShots(GameState& s,real dt,Random& rnd,EnemyGrid& enemyGrid){
   retain(s.shots,[](const Shot& q){return q.ttl>0;},MAX_SHOTS);
 }
 
-bool hitOnce(Enemy& e,int playerSlot,real time,real every){
-  const auto slot=static_cast<std::size_t>(std::clamp(playerSlot,0,cfg::MAX_PLAYERS-1));
+bool hitOnce(Enemy& e,int character,real time,real every){
+  const auto slot=static_cast<std::size_t>(std::clamp(character,0,CHARACTER_COUNT-1));
   if(e.orbitHitUntil[slot]>time)return false;
   e.orbitHitUntil[slot]=time+every;
   return true;
@@ -295,8 +327,8 @@ void updateWeapons(GameState& s,real dt,Random& rnd,const PlayerList& alive){
 
 } // namespace
 
-bool activateSpecial(GameState& s,const std::string& id,Random& rnd){auto it=s.players.find(id);if(it==s.players.end())return false;auto& p=it->second;if(!p.alive||s.over||s.phaseStatus=="transition"||!p.pendingPowers.empty()||p.specialCharge<100||p.specialCooldown>0)return false;bool alt=p.specialVariant==1;if((alt&&p.color==2&&s.shots.size()+16>MAX_SHOTS)||(!alt&&p.color==3&&s.shots.size()+8>MAX_SHOTS))return false;if((alt?p.color!=2:(p.color==1||p.color==2))&&s.zones.size()>=MAX_ZONES)return false;p.specialCharge=0;p.specialCooldown=8;++p.castCount;Event ev;ev.kind="special";ev.x=p.x;ev.y=p.y;ev.color=p.color;ev.variant=alt?1:0;
- if(alt)castAltSpecial(s,p,rnd,ev);else if(p.color==0){for(auto& e:s.enemies)if(e.hp>0&&distanceSq({p.x,p.y},{e.x,e.y})<280.0*280.0){e.freezeFor=e.boss?0:2;damageEnemy(s,e,p.damage*4,rnd,&p,true,false,"","special");}retain(s.enemyShots,[&](const EnemyShot& sh){return distanceSq({p.x,p.y},{sh.x,sh.y})>220.0*220.0;});}
+bool activateSpecial(GameState& s,const std::string& id,Random& rnd){auto it=s.players.find(id);if(it==s.players.end())return false;auto& p=it->second;if(!p.alive||s.over||s.phaseStatus=="transition"||!p.pendingPowers.empty()||p.specialCharge<100||p.specialCooldown>0)return false;bool alt=p.specialVariant==1;if(alt&&p.color==AURORA&&s.shots.size()+12>MAX_SHOTS)return false;if((alt&&p.color==2&&s.shots.size()+16>MAX_SHOTS)||(!alt&&p.color==3&&s.shots.size()+8>MAX_SHOTS))return false;if(p.color!=DEVELOPER&&p.color!=AURORA&&(alt?p.color!=2:(p.color==1||p.color==2))&&s.zones.size()>=MAX_ZONES)return false;p.specialCharge=0;p.specialCooldown=8;++p.castCount;Event ev;ev.kind="special";ev.x=p.x;ev.y=p.y;ev.color=p.color;ev.variant=alt?1:0;
+ if(p.color==DEVELOPER)castDeveloper(s,p,rnd,alt);else if(p.color==AURORA)castAurora(s,p,rnd,alt);else if(alt)castAltSpecial(s,p,rnd,ev);else if(p.color==0){for(auto& e:s.enemies)if(e.hp>0&&distanceSq({p.x,p.y},{e.x,e.y})<280.0*280.0){e.freezeFor=e.boss?0:2;damageEnemy(s,e,p.damage*4,rnd,&p,true,false,"","special");}retain(s.enemyShots,[&](const EnemyShot& sh){return distanceSq({p.x,p.y},{sh.x,sh.y})>220.0*220.0;});}
  else if(p.color==1){Enemy* t=nearestEnemy(s,{p.x,p.y},500);auto d=dashDirection(p,{p.input.x,p.input.y});Zone z;z.x=t?t->x:p.x+d.x*180;z.y=t?t->y:p.y+d.y*180;z.radius=165;z.ttl=3.6;z.warning=.6;z.kind="meteor";z.damage=p.damage*9;z.dps=p.damage*.5;z.owner=p.id;z.color=1;addZone(s,z);ev.x=z.x;ev.y=z.y;}
  else if(p.color==2){Zone z;z.x=p.x;z.y=p.y;z.radius=190;z.ttl=4;z.kind="roots";z.dps=p.damage*2;z.owner=p.id;z.color=2;addZone(s,z);}
  else {auto d=dashDirection(p,{p.input.x,p.input.y});real fx=p.x,fy=p.y;p.x+=d.x*170;p.y+=d.y*170;++p.motionId;p.invulnerableFor=std::max(p.invulnerableFor,.3);for(int n=0;n<8;n++){auto sh=playerShot(p,n*PI/4,true);sh.x=fx;sh.y=fy;sh.boomerang=true;s.shots.push_back(std::move(sh));}ev.x=p.x;ev.y=p.y;ev.points={fx,fy};}
@@ -357,7 +389,7 @@ void startNextPhase(GameState& s,const PlayerList& alive){++s.phase;if(s.phase>=
 } // namespace
 
 void updateGame(GameState& s,real dt,Random& rnd){if(s.over)return;dt=std::clamp(dt,0.0,.08);PlayerList players,alive;for(auto& [_,p]:s.players){players.push_back(&p);if(p.alive)alive.push_back(&p);}if(alive.empty()){s.over=!players.empty();return;}s.time+=dt;retain(s.events,[&](const Event&e){return e.t>=s.time-1.5;});if(s.phaseStatus=="transition"){s.transitionTime=std::max(0.0,s.transitionTime-dt);if(s.transitionTime<=0)startNextPhase(s,alive);return;}if(s.phaseStatus=="horde"){s.phaseTime=std::min(phaseDuration(s),s.phaseTime+dt);if(s.phaseTime>=phaseDuration(s))summonBoss(s,alive);}Difficulty diff=difficultyAt(phaseClock(s),(int)alive.size(),s.phase,&s);
- for(auto* p:alive){if(!p->pendingPowers.empty()){p->powerTimer+=dt;if(p->powerTimer>=15)applyPower(*p,p->pendingPowers.front());}else{if(p->pendingChests>0){--p->pendingChests;if(offerPowers(*p,rnd,s.players.size()>1)){}else{p->coins+=10;p->hp=std::min(p->maxHp,p->hp+30*healingScale(s));}}grantXp(s,*p,0,rnd);}p->hitCooldown=std::max(0.0,p->hitCooldown-dt);p->invulnerableFor=std::max(0.0,p->invulnerableFor-dt);p->attackCooldown-=dt;p->dashCooldown=std::max(0.0,p->dashCooldown-dt);p->specialCooldown=std::max(0.0,p->specialCooldown-dt);if(p->pendingPowers.empty()){if(p->input.x||p->input.y){p->moveX=p->input.x;p->moveY=p->input.y;}auto d=movementDelta(*p,dt);p->x+=d.x;p->y+=d.y;}p->dashFor=std::max(0.0,p->dashFor-dt);}
+ for(auto* p:alive){if(!p->pendingPowers.empty()){p->powerTimer+=dt;if(p->powerTimer>=15)applyPower(*p,p->pendingPowers.front());}else{if(p->pendingChests>0){--p->pendingChests;if(offerPowers(*p,rnd,s.players.size()>1)){}else{p->coins+=10;p->hp=std::min(p->maxHp,p->hp+30*healingScale(s));}}grantXp(s,*p,0,rnd);}p->hitCooldown=std::max(0.0,p->hitCooldown-dt);p->invulnerableFor=std::max(0.0,p->invulnerableFor-dt);p->attackCooldown-=dt;p->dashCooldown=std::max(0.0,p->dashCooldown-dt);p->specialCooldown=std::max(0.0,p->specialCooldown-dt);if(p->pendingPowers.empty()){if(p->color==DEVELOPER)p->specialCharge=std::min(cfg::SPECIAL_MAX,p->specialCharge+dt*10);if(p->input.x||p->input.y){p->moveX=p->input.x;p->moveY=p->input.y;}auto d=movementDelta(*p,dt);p->x+=d.x;p->y+=d.y;}p->dashFor=std::max(0.0,p->dashFor-dt);}
  if(s.phaseStatus=="horde")spawnHorde(s,dt,diff,alive,rnd);updateObjective(s,dt,diff,alive,rnd);updateEncounter(s,dt,diff,alive,rnd);updatePlayerAttacks(s,alive);EnemyGrid enemyGrid(96.0f);updateEnemies(s,dt,diff,alive,rnd,enemyGrid);updateHazards(s,dt,alive);updateEnemyShots(s,dt,alive);updateShots(s,dt,rnd,enemyGrid);updateWeapons(s,dt,rnd,alive);retain(s.enemies,[](const Enemy&e){return e.hp>0;});
  if(s.players.size()>1)for(auto* p:alive){int r=rankOf(*p,"lifelink");if(!r||p->lifelinkAt>s.time)continue;p->lifelinkAt=s.time+2;for(auto* q:alive)if(q!=p&&distanceSq({p->x,p->y},{q->x,q->y})<240.0*240.0)q->hp=std::min(q->maxHp,q->hp+r*2*healingScale(s));}
  revive(s,dt);PlayerList survivors;for(auto& [_,p]:s.players)if(p.alive)survivors.push_back(&p);collectDrops(s,dt,survivors,rnd);s.cleanup-=dt;if(s.cleanup<=0){s.cleanup=.75;retain(s.gems,[&](const Drop&g){if(g.dead||g.ttl<=0)return false;for(auto* p:alive)if(distanceSq({g.x,g.y},{p->x,p->y})<1500.0*1500.0)return true;return false;},MAX_DROPS);retain(s.enemies,[&](const Enemy&e){if(e.boss)return true;if(e.age>=75)return false;for(auto* p:alive)if(distanceSq({e.x,e.y},{p->x,p->y})<1450.0*1450.0)return true;return false;},MAX_ENEMIES);}else retain(s.gems,[](const Drop&g){return !g.dead&&g.ttl>0;},MAX_DROPS);

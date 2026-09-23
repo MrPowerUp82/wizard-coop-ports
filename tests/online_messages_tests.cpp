@@ -21,6 +21,10 @@ int main() {
     assert(j["type"] == "join" && j["v"] == kProtocolVersion && j["room"] == "ABC234" && j["name"] == "Ana");
     assert(j["color"] == 2 && j["campaign"] == "classic" && j["curses"][0] == "swarm" && j["visibility"] == "closed");
     assert(j["meta"]["vigor"] == 3 && j["loadout"]["weapon"] == "orbit" && j["loadout"]["special"] == 1);
+    // server/server.js refuses the Aurora Guardian unless `unlocks.aurora` is true (src/net.js sends it always).
+    assert(j["unlocks"]["aurora"] == false);
+    r.auroraUnlocked = true; r.color = AURORA;
+    assert(json::parse(encodeEntry(r))["unlocks"]["aurora"] == true && json::parse(encodeEntry(r))["color"] == AURORA);
     r.action = "create";
     assert(!json::parse(encodeEntry(r)).contains("room"));
     r.name = std::string("Ana\xFF");  // invalid UTF-8 never throws
@@ -51,6 +55,12 @@ int main() {
       "players":[{"id":"u1","name":"Ana","color":0,"connected":true},{"id":"u2","name":"Beto","color":3,"connected":false}]})");
     assert(lobby.kind == ServerKind::Lobby && lobby.lobby.hostId == "u1" && lobby.lobby.players.size() == 2);
     assert(lobby.lobby.players[1].color == 3 && !lobby.lobby.players[1].connected && lobby.lobby.curses[0] == "tyrant");
+    // The unlockable characters (4, 5) travel as they are; out-of-range colours are clamped.
+    const auto secret = parseServerMessage(R"({"type":"lobby","players":[{"id":"u1","name":"Dev","color":4},{"id":"u2","name":"Sol","color":5},{"id":"u3","name":"X","color":9}]})");
+    assert(secret.lobby.players[0].color == DEVELOPER && secret.lobby.players[1].color == AURORA && secret.lobby.players[2].color == AURORA);
+    assert(parseServerMessage(R"({"type":"joined","room":"A","playerId":"u1","token":"t","color":5})").joined.color == AURORA);
+    const auto locked = parseServerMessage(R"({"type":"error","code":"CHARACTER_LOCKED","message":"Vença o modo Clássico para desbloquear o Guardião da Aurora."})");
+    assert(locked.kind == ServerKind::Error && locked.error.code == "CHARACTER_LOCKED" && !locked.error.message.empty());
     const auto error = parseServerMessage(R"({"type":"error","code":"CHARACTER_TAKEN","message":"Em uso","players":[{"id":"u1","name":"Ana","color":0}]})");
     assert(error.kind == ServerKind::Error && error.error.code == "CHARACTER_TAKEN" && error.error.players.size() == 1);
     const auto rooms = parseServerMessage(R"({"type":"rooms","rooms":[{"code":"XYZ789","count":2,"running":true,"host":"Ana","campaign":"classic","curses":[]}],
@@ -61,6 +71,9 @@ int main() {
     const auto state = parseServerMessage(R"({"type":"state","state":{"t":2.5,"p":[["u1","Ana",0,1,2,100,100,0,1,true,190,{},null]],
       "e":[],"s":[],"es":[],"g":[],"h":[],"r":[],"z":[],"ev":[]}})");
     assert(state.kind == ServerKind::State && state.state && state.state->time == 2.5 && state.state->players.at("u1").x == 1);
+    const auto dev = parseServerMessage(R"({"type":"state","state":{"t":1,"p":[["u1","Dev",4,1,2,500,500,0,1,true,190,{},null]],
+      "e":[],"s":[],"es":[],"g":[],"h":[],"r":[],"z":[],"ev":[]}})");
+    assert(dev.state && dev.state->players.at("u1").color == DEVELOPER && dev.state->players.at("u1").maxHp == 500);
     assert(parseServerMessage(R"({"type":"start","state":[]})").kind == ServerKind::BadSnapshot);
     assert(parseServerMessage("{nope").kind == ServerKind::Unknown);
     assert(parseServerMessage(R"({"type":"lobby","players":"x"})").kind == ServerKind::Unknown);

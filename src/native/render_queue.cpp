@@ -68,8 +68,22 @@ SpriteId spriteForEnemy(const Enemy& enemy) { return spriteFromName(enemy.type);
 SpriteId spriteForEnemyShot(const EnemyShot& shot) { return spriteFromName(shot.sprite); }
 
 std::uint32_t playerColor(int color, std::uint8_t alpha) {
-  static constexpr std::uint32_t colors[4] = {rgba(118, 223, 255), rgba(255, 153, 85), rgba(146, 237, 104), rgba(196, 160, 255)};
-  return withAlpha(colors[std::clamp(color, 0, 3)], alpha);
+  // server/weapons.js SPELLS tints; the last two are the Developer (#73ffe4) and the Aurora Guardian (#ffd778).
+  static constexpr std::uint32_t colors[CHARACTER_COUNT] = {rgba(118, 223, 255), rgba(255, 153, 85), rgba(146, 237, 104),
+                                                            rgba(196, 160, 255), rgba(115, 255, 228), rgba(255, 215, 120)};
+  return withAlpha(colors[std::clamp(color, 0, CHARACTER_COUNT - 1)], alpha);
+}
+
+SpriteId playerSprite(int color) {
+  static constexpr SpriteId sprites[CHARACTER_COUNT] = {SpriteId::Player0, SpriteId::Player1, SpriteId::Player2, SpriteId::Player3,
+                                                        SpriteId::PlayerDeveloper, SpriteId::PlayerAurora};
+  return sprites[std::clamp(color, 0, CHARACTER_COUNT - 1)];
+}
+
+SpriteId shotSprite(int color) {
+  static constexpr SpriteId sprites[CHARACTER_COUNT] = {SpriteId::Bolt, SpriteId::Fire, SpriteId::Thorn, SpriteId::Blade,
+                                                        SpriteId::BoltDeveloper, SpriteId::BoltAurora};
+  return sprites[std::clamp(color, 0, CHARACTER_COUNT - 1)];
 }
 
 namespace {
@@ -212,15 +226,12 @@ void buildRenderQueue(const GameState& state, const Camera& camera, RenderQueue&
     float x, y; screenPoint(shot.x, shot.y, camera, x, y);
     const float size = static_cast<float>(shot.special ? 58 : shot.shard ? 22 : shot.color == 3 ? 46 : 34) * z;
     if (!visible(x, y, size, camera)) continue;
-    const SpriteId sprites[4] = {SpriteId::Bolt, SpriteId::Fire, SpriteId::Thorn, SpriteId::Blade};
-    const auto index = std::clamp(shot.color, 0, 3);
-    out.sprites.push_back({sprites[index], x, y, size, static_cast<float>(std::atan2(shot.vy, shot.vx)), 0xffffffffu, 5});
+    out.sprites.push_back({shotSprite(shot.color), x, y, size, static_cast<float>(std::atan2(shot.vy, shot.vx)), 0xffffffffu, 5});
   }
 
   for (const auto& [_, player] : state.players) {
     float x, y; screenPoint(player.x, player.y, camera, x, y);
-    const SpriteId players[4] = {SpriteId::Player0, SpriteId::Player1, SpriteId::Player2, SpriteId::Player3};
-    const auto sprite = players[std::clamp(player.color, 0, 3)];
+    const auto sprite = playerSprite(player.color);
     if (!player.alive) {
       out.sprites.push_back({sprite, x, y, 68.0f * z, 0, rgba(255, 255, 255, 90), 6});
       out.circles.push_back({x, y, 44 * z, rgba(255, 255, 255, 60), 8, 2});

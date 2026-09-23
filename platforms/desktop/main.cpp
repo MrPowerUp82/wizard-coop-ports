@@ -73,6 +73,16 @@ Args parseArgs(int argc, char** argv) {
     else if (k == "--audio-demo") a.audioDemo = next("audio-demo.wav");
     else if (k == "--shots-every") a.shotsEvery = std::atoi(next("60").c_str());
     else if (k == "--campaign") a.frontend.campaign = next("quick");
+    else if (k == "--characters") { // e.g. "4,5": characters of the autoplay/--play slots (secrets included)
+      const std::string list = next("0,1,2,3");
+      std::size_t at = 0;
+      for (auto& c : a.frontend.characters) {
+        if (at > list.size()) break;
+        c = std::clamp(std::atoi(list.c_str() + at), 0, CHARACTER_COUNT - 1);
+        at = list.find(',', at);
+        at = at == std::string::npos ? list.size() + 1 : at + 1;
+      }
+    }
     else if (k == "--play") a.frontend.startImmediately = true;
     else if (k == "--atlas") a.atlas = next("");
     else if (k == "--font") a.font = next("");
@@ -267,8 +277,8 @@ int main(int argc, char** argv) {
 
   BatchRenderer batch;
   std::string error;
-  const int cell = atlas->w / 6;
-  if (!batch.init(renderer, atlas, cell, 6, terrain, font, error, args.psp)) { std::fprintf(stderr, "renderer init: %s\n", error.c_str()); return 1; }
+  const int cell = atlas->w / native::kAtlasColumns;
+  if (!batch.init(renderer, atlas, cell, native::kAtlasColumns, terrain, font, error, args.psp)) { std::fprintf(stderr, "renderer init: %s\n", error.c_str()); return 1; }
   SDL_FreeSurface(atlas);
   if (terrain) SDL_FreeSurface(terrain);
   TTF_CloseFont(font);
@@ -391,8 +401,15 @@ int main(int argc, char** argv) {
     if (headless && !args.onlineBot.empty()) SDL_Delay(16); // online bots play in real time
   }
 
-  if (!args.onlineBot.empty())
-    std::printf("online_players=%d online_time=%.1f\n", static_cast<int>(frontend->state().players.size()), frontend->state().time);
+  if (!args.onlineBot.empty()) {
+    std::vector<int> colors;
+    for (const auto& [_, p] : frontend->state().players) colors.push_back(p.color);
+    std::sort(colors.begin(), colors.end());
+    std::string list;
+    for (int c : colors) list += (list.empty() ? "" : ",") + std::to_string(c);
+    std::printf("online_players=%d online_time=%.1f online_colors=%s\n", static_cast<int>(frontend->state().players.size()), frontend->state().time,
+                list.c_str());
+  }
   if (frames > 60) {
     const auto& s = frontend->state();
     std::printf("frames=%d avg_cpu_frame=%.3fms worst=%.3fms avg_queue=%.3fms game_time=%.1fs phase=%d enemies=%d over=%d\n",

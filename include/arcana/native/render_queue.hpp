@@ -14,9 +14,15 @@ enum class SpriteId : std::uint8_t {
   Bolt, Fire, Thorn, Blade,
   Gem, GreenGem, Coin, Heart,
   GemRare, GemEpic,
+  PlayerDeveloper, PlayerAurora, BoltDeveloper, BoltAurora,
   Unknown,
   Count
 };
+// Cells per row of native_atlas*.png (tools/assets/bake_native_atlas.py): 7 x 6 holds every sprite
+// with the same texture page sizes as the old 6 x 6 sheet.
+constexpr int kAtlasColumns = 7;
+SpriteId playerSprite(int color);
+SpriteId shotSprite(int color);
 
 // Colors are packed as 0xAABBGGRR (vita2d's RGBA8 layout); backends unpack as needed.
 constexpr std::uint32_t rgba(std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a = 255) {

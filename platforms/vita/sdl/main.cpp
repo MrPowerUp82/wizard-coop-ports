@@ -82,7 +82,7 @@ int main(int, char**) {
   TTF_Font* font = TTF_OpenFont("app0:/assets/fonts/DejaVuSans-Bold.ttf", kFontBakePx);
   BatchRenderer batch;
   std::string error;
-  if (!renderer || !atlas || !font || !batch.init(renderer, atlas, atlas->w / 6, 6, terrain, font, error)) {
+  if (!renderer || !atlas || !font || !batch.init(renderer, atlas, atlas->w / native::kAtlasColumns, native::kAtlasColumns, terrain, font, error)) {
     SDL_Log("Arcana init failed: %s %s", SDL_GetError(), error.c_str());
     sceKernelExitProcess(1);
     return 1;

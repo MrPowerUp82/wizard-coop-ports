@@ -44,6 +44,7 @@ struct EntryRequest {
   std::vector<std::string> curses;
   MetaRanks meta;                // Grimório ranks; the server sanitizes them
   Loadout loadout;
+  bool auroraUnlocked{};         // `unlocks.aurora`: the server refuses the Aurora Guardian without it
 };
 
 std::string encodeEntry(const EntryRequest& request);

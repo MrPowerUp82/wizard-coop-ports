@@ -21,6 +21,10 @@ constexpr real PI = 3.14159265358979323846;
 struct Vec2 { real x{}, y{}; };
 inline real distanceSq(Vec2 a, Vec2 b) { const auto dx=a.x-b.x, dy=a.y-b.y; return dx*dx+dy*dy; }
 
+// Characters (Player::color): the four standard mages, then two unlockable ones — the secret
+// Developer (server/developer.js) and the Aurora Guardian, the Classic reward (server/aurora.js).
+constexpr int STANDARD_CHARACTERS = 4, DEVELOPER = 4, AURORA = 5, CHARACTER_COUNT = 6;
+
 class Random {
 public:
   virtual ~Random() = default;
@@ -77,7 +81,7 @@ struct Enemy {
   real comboAt{-1}, touchCooldown{}, chargeTimer{}, windup{}, dash{}, dashAngle{}, dashSpeed{}, dashWarn{}, dashTimer{}, shootTimer{}, fuse{};
   real attackCooldown{2.5}, rangedCooldown{1.5};
   real vx{}, vy{}; bool hasVelocity{};
-  std::array<real, cfg::MAX_PLAYERS> orbitHitUntil{};
+  std::array<real, CHARACTER_COUNT> orbitHitUntil{}; // per character: unique within a run
 };
 struct Shot {
   real x{},y{},vx{},vy{},ttl{},damage{}; int color{}; int pierce{1};
@@ -120,6 +124,11 @@ struct DailyChallenge { std::string key; std::uint32_t seed{}; std::vector<std::
 
 GameState createGameState(std::string campaign="classic", std::vector<std::string> curses={});
 Player createPlayer(std::string id, std::string name, int color=0, const MetaRanks* meta=nullptr, const Loadout* loadout=nullptr);
+// Lobby-only change: the character's bonuses are reversible multipliers, so permanent upgrades survive
+// any number of swaps (server/developer.js selectPlayerCharacter).
+void selectPlayerCharacter(Player& p, int color);
+// The result that unlocks the Aurora Guardian: the sixth realm cleared in the Classic ritual.
+bool earnsAurora(const GameState& s);
 void addLatePlayer(GameState& s, Player player);
 void updateGame(GameState& s, real dt, Random& random);
 inline void updateGame(GameState& s, real dt) { static DefaultRandom rng; updateGame(s,dt,rng); }
