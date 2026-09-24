@@ -389,7 +389,6 @@ void drawPlayers(Frame& f) {
     }
     b.ellipse(x, y + 24, 19, 6, rgba(0, 0, 0, static_cast<std::uint8_t>(pose.alpha * 0.24f * 255)));
     b.sprite(native::playerSprite(c), x + pose.x, y + pose.y, 68, pose.rotation, pose.alpha, pose.sx, pose.sy, pose.flash);
-    if (p.alive && c == AURORA) b.ellipse(x, y - 34, 18, 6, A(color, 0.8f), 2); // solar halo
     if (p.alive && c == GOD) {
       for (int n = 0; n < 2; ++n) {
         const double a = f.game.time * 2.5 + n * PI;
@@ -412,7 +411,8 @@ void drawPlayers(Frame& f) {
         }
         b.stroke(1.5f, A(color, 0.7f), true);
       }
-      b.textOutlined(x, y - 72 - (f.textScale - 1) * 10, "</>", 13 * f.textScale, color, rgba(6, 10, 14, 170), Align::Center);
+      // Canvas draws the 14 px glyph at a -44 baseline; this atlas API takes its top edge.
+      b.text(x, y - 58, "</>", 14, color, Align::Center);
     }
     if (p.alive) {
       if (const int orbit = std::clamp(rankOf(p, "orbit"), 0, 5)) {
@@ -570,9 +570,9 @@ void drawEffectsNormal(Frame& f) {
           b.beginPath();
           b.lineTo(fx.x + side * (edge - 24), fx.y - edge); b.lineTo(fx.x + side * edge, fx.y - edge);
           b.lineTo(fx.x + side * edge, fx.y + edge); b.lineTo(fx.x + side * (edge - 24), fx.y + edge);
-          b.stroke(4, A(fx.color, fade));
+          b.stroke(4, A(fx.color, fade * 0.8f));
         }
-        b.textOutlined(fx.x, fx.y - 80, "RESTAURAÇÃO DO SISTEMA", 16, A(fx.color, fade), A(rgba(10, 10, 16), fade * 0.8f), Align::Center);
+        b.text(fx.x, fx.y - 80, "RESTAURAÇÃO DO SISTEMA", 16, A(fx.color, fade), Align::Center);
         break;
       }
       case FxKind::Ascend: {

@@ -72,6 +72,34 @@ int main() {
     fastSinCos(a, fs, fc);
     assert(std::fabs(fs - std::sin(a)) < 2e-3f && std::fabs(fc - std::cos(a)) < 2e-3f);
   }
+  // The three unlockable characters share this animator on Switch, Vita and PSP. Exercise
+  // the event path, including the alternate specials, rather than only the combat rules.
+  for (int color : {DEVELOPER, AURORA, GOD}) for (int variant : {0, 1}) {
+    GameState game;
+    Animator anim;
+    anim.update(game, 1.0 / 60, false); // establish the event watermark
+    Event event;
+    event.id = 1;
+    event.kind = "special";
+    event.x = 120;
+    event.y = 80;
+    event.color = color;
+    event.variant = variant;
+    game.events.push_back(event);
+    anim.update(game, 1.0 / 60, false);
+    const FxKind expected = color == DEVELOPER ? (variant ? FxKind::SystemReset : FxKind::Ring) : FxKind::Aurora;
+    const auto count = std::count_if(anim.effects().begin(), anim.effects().end(), [&](const Effect& fx) {
+      return fx.kind == expected && fx.major;
+    });
+    assert(count == 1);
+    assert(std::count_if(anim.effects().begin(), anim.effects().end(), [](const Effect& fx) {
+      return fx.kind == FxKind::Mote && fx.shape == MoteShape::Star;
+    }) == (color == DEVELOPER ? 24 : 16));
+    anim.update(game, 1.0 / 60, false);
+    assert(std::count_if(anim.effects().begin(), anim.effects().end(), [&](const Effect& fx) {
+      return fx.kind == expected && fx.major;
+    }) == 1); // old snapshots must not replay the special
+  }
   // Solo: P1 picks Vermelho (1) with one press to the right.
   {
     auto f = titleScreen();

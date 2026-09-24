@@ -1,6 +1,11 @@
 Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch**, **PS Vita** e **PSP**, com builds para Windows e Linux. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
 
-## Novidades da v0.9.0
+## Correções da v0.9.1
+
+- **Efeitos dos personagens desbloqueáveis:** removido o halo adicional que só aparecia no port do Guardião da Aurora; corrigida a posição da marca `</>` do Desenvolvedor; e ajustados a opacidade e o texto do especial *Restauração do sistema* para acompanhar a versão web.
+- **Regressão dos especiais:** teste nativo para as duas variantes de O Desenvolvedor, Guardião da Aurora e The God, cobrindo o efeito principal, as partículas e a ausência de repetição de eventos. O mesmo animador é usado no Switch, Vita, PSP, Windows e Linux.
+
+## Da v0.9.0
 
 - **The God no Grimório:** custa 60.000 moedas e continua desbloqueado após redistribuir melhorias. Começa com 500 de vida, +50% de dano, +20% de velocidade, 12 de armadura e ataques 15% mais rápidos. Seus disparos atravessam três inimigos; dois planetas orbitam e causam dano por contato. Os especiais são Big Bang e Constelação.
 - **Sprites próprios para os três personagens desbloqueáveis:** O Desenvolvedor, Guardião da Aurora e The God agora usam suas artes finais no atlas nativo, inclusive na seleção e durante a partida.

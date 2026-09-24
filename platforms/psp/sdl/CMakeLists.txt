@@ -1,7 +1,7 @@
 # Arcana Survivors — PSP (EBOOT.PBP), PSPSDK + SDL2. Build inside pspdev/pspdev:
 #   tools/docker/psp-build.sh      (from the repo root)
 cmake_minimum_required(VERSION 3.20)
-project(ArcanaSurvivorsPsp VERSION 0.9.0 LANGUAGES C CXX)
+project(ArcanaSurvivorsPsp VERSION 0.9.1 LANGUAGES C CXX)
 
 set(ROOT "${CMAKE_CURRENT_LIST_DIR}/../../..")
 find_package(SDL2 REQUIRED)
