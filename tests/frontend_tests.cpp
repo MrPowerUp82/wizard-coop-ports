@@ -100,6 +100,43 @@ int main() {
       return fx.kind == expected && fx.major;
     }) == 1); // old snapshots must not replay the special
   }
+  // A new run restarts event IDs. Reset must discard the previous run's high watermark,
+  // so the next character's special and Aurora's passive ray both appear immediately.
+  {
+    Animator anim;
+    GameState first;
+    anim.update(first, 1.0 / 60, false);
+    Event oldSpecial;
+    oldSpecial.id = 800;
+    oldSpecial.kind = "special";
+    oldSpecial.color = DEVELOPER;
+    first.events.push_back(oldSpecial);
+    anim.update(first, 1.0 / 60, false);
+    assert(!anim.effects().empty());
+
+    anim.reset();
+    assert(anim.effects().empty());
+    GameState second;
+    anim.update(second, 1.0 / 60, false);
+    Event newSpecial;
+    newSpecial.id = 1;
+    newSpecial.kind = "special";
+    newSpecial.color = AURORA;
+    second.events.push_back(newSpecial);
+    Event ray;
+    ray.id = 2;
+    ray.kind = "auroraRay";
+    ray.points.push_back(160);
+    ray.points.push_back(100);
+    second.events.push_back(ray);
+    anim.update(second, 1.0 / 60, false);
+    assert(std::count_if(anim.effects().begin(), anim.effects().end(), [](const Effect& fx) {
+      return fx.kind == FxKind::Aurora && fx.major;
+    }) == 1);
+    assert(std::count_if(anim.effects().begin(), anim.effects().end(), [](const Effect& fx) {
+      return fx.kind == FxKind::SolarRay;
+    }) == 1);
+  }
   // Solo: P1 picks Vermelho (1) with one press to the right.
   {
     auto f = titleScreen();

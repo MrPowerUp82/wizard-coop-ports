@@ -1,6 +1,11 @@
 Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch**, **PS Vita** e **PSP**, com builds para Windows e Linux. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
 
-## Correções da v0.9.1
+## Correções da v0.9.2
+
+- **Efeitos após trocar de personagem:** ao voltar ao menu e iniciar outra partida, o animador agora reinicia a contagem de eventos. Especiais, partículas e o raio solar do Guardião da Aurora aparecem desde o começo da nova partida, sem precisar fechar o jogo. Corrigido no animador compartilhado por Switch, Vita, PSP, Windows e Linux.
+- **Teste de regressão:** cobre a troca de partida com eventos de ID alto seguidos por IDs reiniciados e verifica o especial da Aurora e seu raio solar passivo.
+
+## Da v0.9.1
 
 - **Efeitos dos personagens desbloqueáveis:** removido o halo adicional que só aparecia no port do Guardião da Aurora; corrigida a posição da marca `</>` do Desenvolvedor; e ajustados a opacidade e o texto do especial *Restauração do sistema* para acompanhar a versão web.
 - **Regressão dos especiais:** teste nativo para as duas variantes de O Desenvolvedor, Guardião da Aurora e The God, cobrindo o efeito principal, as partículas e a ausência de repetição de eventos. O mesmo animador é usado no Switch, Vita, PSP, Windows e Linux.

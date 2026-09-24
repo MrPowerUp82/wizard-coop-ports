@@ -50,6 +50,7 @@ void Animator::reset() {
   zoneWarnings_.clear();
   time_ = shake_ = freeze_ = 0;
   flashLife_ = 0;
+  lastEventId_ = 0;
   haveEventId_ = false;
   lastPhase_ = -1;
   lastStatus_.clear();

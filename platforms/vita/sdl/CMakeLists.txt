@@ -6,7 +6,7 @@ if(NOT DEFINED ENV{VITASDK})
   message(FATAL_ERROR "VITASDK is not set.")
 endif()
 set(CMAKE_TOOLCHAIN_FILE "$ENV{VITASDK}/share/vita.toolchain.cmake" CACHE PATH "toolchain")
-project(ArcanaSurvivorsVitaSDL VERSION 0.9.1 LANGUAGES C CXX)
+project(ArcanaSurvivorsVitaSDL VERSION 0.9.2 LANGUAGES C CXX)
 include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 
 set(ROOT "${CMAKE_CURRENT_LIST_DIR}/../../..")
