@@ -1,5 +1,11 @@
 Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch**, **PS Vita** e **PSP**, com builds para Windows e Linux. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
 
+## Novidades da v0.9.3
+
+- **Nova arte de abertura:** tela de título ilustrada em Switch, PS Vita, PSP, Windows e Linux; imagem própria de 480×272 no PSP.
+- **Créditos no jogo:** Guilherme de Lucca Moraes e Luis Paula Alves aparecem como colaboradores de ideias e sugestões, inclusive na tela compacta do PSP.
+- **Banner do projeto:** a arte promocional aparece no README do port nativo.
+
 ## Correções da v0.9.2
 
 - **Efeitos após trocar de personagem:** ao voltar ao menu e iniciar outra partida, o animador agora reinicia a contagem de eventos. Especiais, partículas e o raio solar do Guardião da Aurora aparecem desde o começo da nova partida, sem precisar fechar o jogo. Corrigido no animador compartilhado por Switch, Vita, PSP, Windows e Linux.

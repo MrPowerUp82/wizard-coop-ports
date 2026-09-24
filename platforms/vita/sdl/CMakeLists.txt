@@ -52,6 +52,7 @@ vita_create_vpk(arcana-survivors-native.vpk ARCA00001 eboot.bin
   VERSION 00.90
   NAME "Arcana Survivors"
   FILE ${ROOT}/assets/native_atlas_128.png assets/native_atlas_128.png
+  FILE ${ROOT}/assets/title_1280.png assets/title_1280.png
   FILE ${ROOT}/assets/terrain_tiles.png assets/terrain_tiles.png
   FILE ${ROOT}/assets/fonts/DejaVuSans-Bold.ttf assets/fonts/DejaVuSans-Bold.ttf
   FILE ${CMAKE_CURRENT_LIST_DIR}/sce_sys sce_sys

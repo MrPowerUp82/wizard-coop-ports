@@ -1,0 +1,78 @@
+name: Native release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: host
+            output: linux
+          - target: switch
+            output: switch
+          - target: vita
+            output: vita
+          - target: psp
+            output: psp
+          - target: windows
+            output: windows
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test
+        run: bash tools/docker/build-all.sh "${{ matrix.target }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.output }}
+          path: dist/${{ matrix.output }}/
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-linux
+          path: dist/linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-switch
+          path: dist/switch
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-vita
+          path: dist/vita
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-psp
+          path: dist/psp
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-windows
+          path: dist/windows
+      - name: Package and verify
+        run: bash tools/release/package-ci.sh "${GITHUB_REF_NAME}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.ref_name }}
+          path: dist/release/${{ github.ref_name }}/
+          if-no-files-found: error
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/release/"$GITHUB_REF_NAME"/*.nro dist/release/"$GITHUB_REF_NAME"/*.vpk dist/release/"$GITHUB_REF_NAME"/*.cso dist/release/"$GITHUB_REF_NAME"/*.iso dist/release/"$GITHUB_REF_NAME"/*.tar.gz dist/release/"$GITHUB_REF_NAME"/*.zip dist/release/"$GITHUB_REF_NAME"/SHA256SUMS.txt --verify-tag --title "Arcana Survivors $GITHUB_REF_NAME" --notes-file dist/release/"$GITHUB_REF_NAME"/RELEASE_NOTES.md

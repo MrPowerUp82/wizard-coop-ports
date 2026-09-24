@@ -95,6 +95,7 @@ int main(int argc, char* argv[]) {
     SDL_Quit();
     return 1;
   }
+  if (SDL_Surface* title = IMG_Load((assetsDir + "assets/title_480.png").c_str())) { batch.loadTitle(title); SDL_FreeSurface(title); }
   SDL_FreeSurface(atlas);
   if (terrain) SDL_FreeSurface(terrain);
   TTF_CloseFont(font);

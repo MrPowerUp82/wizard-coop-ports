@@ -87,6 +87,7 @@ int main(int, char**) {
     sceKernelExitProcess(1);
     return 1;
   }
+  if (SDL_Surface* title = IMG_Load("app0:/assets/title_1280.png")) { batch.loadTitle(title); SDL_FreeSurface(title); }
   SDL_FreeSurface(atlas);
   if (terrain) SDL_FreeSurface(terrain);
   TTF_CloseFont(font);

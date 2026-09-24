@@ -44,7 +44,7 @@ $Stage = "dist\release\stage\$Name-linux-x86_64"
 if (Test-Path dist\release\stage) { Remove-Item -Recurse -Force dist\release\stage }
 New-Item -ItemType Directory -Force "$Stage\assets\fonts" | Out-Null
 Copy-Item dist\linux\arcana_desktop $Stage\
-Copy-Item assets\native_atlas_128.png, assets\terrain_tiles.png "$Stage\assets\"
+Copy-Item assets\native_atlas_128.png, assets\terrain_tiles.png, assets\title_1280.png "$Stage\assets\"
 Copy-Item assets\fonts\* "$Stage\assets\fonts\"
 Copy-Item assets\cacert.pem "$Stage\assets\"
 Copy-Item THIRD_PARTY_NOTICES.txt "$Stage\"

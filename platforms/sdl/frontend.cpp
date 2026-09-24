@@ -1108,19 +1108,24 @@ void Frontend::renderChooser(BatchRenderer& b, float width, float height) {
 
 void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
   const float s = uiScale(height);
-  b.rect(0, 0, width, height, rgba(10, 10, 22));
+  const bool art = b.titleBackground(width, height);
+  if (art) b.rectGradient(0, 0, width, height, rgba(2, 5, 10, 20), rgba(2, 5, 10, 185), rgba(2, 5, 10, 220), rgba(2, 5, 10, 80));
+  else b.rect(0, 0, width, height, rgba(10, 10, 22));
   // Slowly drifting sprites behind the menu.
-  for (int i = 0; i < 14; ++i) {
+  for (int i = 0; !art && i < 14; ++i) {
     const double t = menuTime_ * 0.15 + i * 0.9;
     const float x = static_cast<float>(std::fmod(i * 173.0 + menuTime_ * (18 + i * 3), width + 200.0)) - 100;
     const float y = height * (0.15f + 0.7f * static_cast<float>(std::fmod(i * 0.37, 1.0))) + static_cast<float>(std::sin(t) * 20 * s);
     b.icon(static_cast<native::SpriteId>(4 + i % 22), x, y, (60 + (i % 3) * 20) * s, rgba(255, 255, 255, 50));
   }
-  b.text(width * 0.5f, height * 0.05f, "ARCANA SURVIVORS", 58 * s, kGold, Align::Center);
-  if (!options_.compact) b.text(width * 0.5f, height * 0.05f + 64 * s, "Sobreviva às hordas, sozinho ou com até 4 arcanistas", 22 * s, kMuted, Align::Center);
+  if (!art) {
+    b.text(width * 0.5f, height * 0.05f, "ARCANA SURVIVORS", 58 * s, kGold, Align::Center);
+    if (!options_.compact) b.text(width * 0.5f, height * 0.05f + 64 * s, "Sobreviva às hordas, sozinho ou com até 4 arcanistas", 22 * s, kMuted, Align::Center);
+  }
 
   const auto items = titleItems();
-  const float mx = options_.compact ? width - 528 * s : width * 0.5f - 260 * s, my = height * (options_.compact ? 0.19f : 0.25f);
+  const float mx = options_.compact ? width - 528 * s : art ? width - 530 * s : width * 0.5f - 260 * s;
+  const float my = height * (options_.compact ? 0.19f : 0.25f);
   // Rows tighten when every unlock is shown, so the hints never reach the join slots (or the PSP's edge).
   const float bottom = height - (options_.compact ? 46 : 222) * s;
   const float step = std::min(48 * s, (bottom - my) / static_cast<float>(items.size())), rowH = step - 6 * s;
@@ -1167,7 +1172,7 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
     if (value) b.text(mx + 500 * s, y + vy, value, 20 * s, sel ? kGold : kMuted, Align::Right);
   }
   const float below = my + static_cast<float>(items.size()) * step;
-  const float hx = options_.compact ? mx + 260 * s : width * 0.5f;
+  const float hx = options_.compact || art ? mx + 260 * s : width * 0.5f;
   b.text(hx, below + 4 * s, hint, (options_.compact ? 15 : 18) * s, kMuted, Align::Center);
   const auto& btn = options_.buttons;
   if (options_.compact) std::snprintf(scratch_, sizeof scratch_, "Esquerda/Direita: personagem · %s: escolher", btn.confirm);
@@ -1253,12 +1258,16 @@ void Frontend::renderCredits(BatchRenderer& b, float width, float height) {
     {"Plataformas", "Nintendo Switch · PS Vita · PSP · Windows · Linux"},
     {"Fonte", "DejaVu Sans"},
   };
-  for (const auto& row : rows) {
+  for (int i = 0; i < (c ? 2 : 4); ++i) {
+    const auto& row = rows[i];
     b.text(cx, y, row.label, (c ? 14 : 16) * s, kMuted, Align::Center);
     b.text(cx, y + (c ? 15 : 19) * s, row.value, (c ? 18 : 21) * s, kText, Align::Center);
     y += (c ? 40 : 58) * s;
   }
-  b.text(cx, y + 4 * s, "© 2026 MrPowerUp82 · Licença MIT", (c ? 14 : 16) * s, rgba(120, 130, 160), Align::Center);
+  b.text(cx, y, "Ideias e sugestões", (c ? 14 : 16) * s, kMuted, Align::Center);
+  b.text(cx, y + (c ? 18 : 22) * s, "Guilherme de Lucca Moraes", (c ? 18 : 21) * s, kText, Align::Center);
+  b.text(cx, y + (c ? 39 : 48) * s, "Luis Paula Alves", (c ? 18 : 21) * s, kText, Align::Center);
+  b.text(cx, y + (c ? 68 : 82) * s, "© 2026 MrPowerUp82 · Licença MIT", (c ? 14 : 16) * s, rgba(120, 130, 160), Align::Center);
   std::snprintf(scratch_, sizeof scratch_, "%s: voltar", options_.buttons.cancel);
   b.text(cx, height - (c ? 20 : 40) * s, scratch_, 15 * s, rgba(120, 130, 160), Align::Center);
 }

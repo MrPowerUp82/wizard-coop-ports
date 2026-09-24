@@ -11,7 +11,7 @@ cp platforms/psp/sdl/icon0.png "$UMD/PSP_GAME/ICON0.PNG"
 cp platforms/psp/sdl/pic1.png "$UMD/PSP_GAME/PIC1.PNG"
 # Unencrypted PRX: accepted by CFW, Adrenaline and PPSSPP (retail firmware never ran homebrew).
 cp build-psp/arcana_psp.prx "$UMD/PSP_GAME/SYSDIR/EBOOT.BIN"
-cp assets/native_atlas_64.png assets/terrain_tiles_64.png "$UMD/PSP_GAME/USRDIR/assets/"
+cp assets/native_atlas_64.png assets/terrain_tiles_64.png assets/title_480.png "$UMD/PSP_GAME/USRDIR/assets/"
 cp assets/fonts/DejaVuSans-Bold.ttf assets/fonts/DejaVu-LICENSE.txt "$UMD/PSP_GAME/USRDIR/assets/fonts/"
 printf 'ARCA-90001|0000000000000001|0001|G' > "$UMD/UMD_DATA.BIN"
 # Fixed timestamps so the image only changes when its content does.

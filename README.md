@@ -1,5 +1,7 @@
 # Arcana Survivors — port nativo em C++
 
+![Arte de Arcana Survivors: quatro arcanistas enfrentam hordas diante de um castelo sob a lua](docs/arcana-banner.png)
+
 Port em C++20 do **Arcana Survivors** (antes *wizard-coop*, um survivors-like cooperativo feito em
 JavaScript) para **Nintendo Switch**, **PS Vita** e **PSP**, com builds para **Windows** e
 **Linux** (o mesmo frontend, usado também para desenvolvimento). Os ports em JavaScript (nx.js / QuickJS) tinham quedas grandes de FPS; aqui não há
@@ -135,6 +137,9 @@ O script de release se recusa a rodar com mudanças não commitadas, para que os
 correspondam a um commit. As notas de destaque de cada versão ficam em `tools/release/NOTES.md`, e a
 versão em `platforms/switch/sdl/Makefile` (`APP_VERSION`).
 
+Ao enviar uma tag `v<versão>` ao GitHub, o workflow de release compila os cinco alvos em jobs
+separados, confere os hashes dos pacotes e publica a release com as notas e os arquivos de instalação.
+
 ### Build manual (sem Docker)
 
 ```bash
@@ -231,3 +236,7 @@ o mapa de arquivos JS → C++ em [`MIGRATION.md`](MIGRATION.md).
 
 Uma mudança só conta como otimização de console quando reduz custo medido, alocações, largura de
 banda de memória ou draw calls. Estar em C++ não garante FPS por si só.
+
+## Créditos
+
+Ideias e sugestões para o jogo: **Guilherme de Lucca Moraes** e **Luis Paula Alves**.

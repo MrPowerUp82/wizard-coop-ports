@@ -4,6 +4,6 @@
 set -euo pipefail
 cd platforms/switch/sdl
 mkdir -p romfs
-cp ../../../assets/native_atlas_128.png ../../../assets/terrain_tiles.png romfs/
+cp ../../../assets/native_atlas_128.png ../../../assets/terrain_tiles.png ../../../assets/title_1280.png romfs/
 make -j"$(nproc)"
 ls -la arcana-survivors.nro

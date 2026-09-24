@@ -279,6 +279,9 @@ int main(int argc, char** argv) {
   std::string error;
   const int cell = atlas->w / native::kAtlasColumns;
   if (!batch.init(renderer, atlas, cell, native::kAtlasColumns, terrain, font, error, args.psp)) { std::fprintf(stderr, "renderer init: %s\n", error.c_str()); return 1; }
+  const std::string titlePath = findAsset("", {args.psp ? "title_480.png" : "title_1280.png"});
+  SDL_Surface* title = titlePath.empty() ? nullptr : IMG_Load(titlePath.c_str());
+  if (title) { batch.loadTitle(title); SDL_FreeSurface(title); }
   SDL_FreeSurface(atlas);
   if (terrain) SDL_FreeSurface(terrain);
   TTF_CloseFont(font);

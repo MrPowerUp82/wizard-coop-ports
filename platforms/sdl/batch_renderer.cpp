@@ -168,8 +168,25 @@ bool BatchRenderer::init(SDL_Renderer* renderer, SDL_Surface* atlas, int cell, i
 }
 
 void BatchRenderer::shutdown() {
+  if (title_) SDL_DestroyTexture(title_);
+  title_ = nullptr;
   if (texture_) SDL_DestroyTexture(texture_);
   texture_ = nullptr;
+}
+
+bool BatchRenderer::loadTitle(SDL_Surface* title) {
+  if (title_) SDL_DestroyTexture(title_);
+  title_ = title ? SDL_CreateTextureFromSurface(renderer_, title) : nullptr;
+  return title_ != nullptr;
+}
+
+bool BatchRenderer::titleBackground(float width, float height) {
+  if (!title_) return false;
+  flush();
+  const SDL_Rect dst{0, 0, static_cast<int>(width), static_cast<int>(height)};
+  if (SDL_RenderCopy(renderer_, title_, nullptr, &dst) != 0) return false;
+  ++stats_.drawCalls;
+  return true;
 }
 
 void BatchRenderer::begin() {

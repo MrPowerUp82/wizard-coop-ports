@@ -36,6 +36,8 @@ public:
   // (64 px cells) and 64 px floor tiles, and drops the hit-flash silhouettes (flashes tint instead).
   bool init(SDL_Renderer* renderer, SDL_Surface* atlas, int cell, int cols, SDL_Surface* terrain, TTF_Font* font, std::string& error,
             bool compact = false);
+  bool loadTitle(SDL_Surface* title);
+  bool titleBackground(float width, float height);
   void shutdown();
 
   void begin();
@@ -98,6 +100,7 @@ private:
 
   SDL_Renderer* renderer_{};
   SDL_Texture* texture_{};
+  SDL_Texture* title_{};
   std::array<UvRect, static_cast<std::size_t>(native::SpriteId::Count)> sprites_{};
   std::array<UvRect, static_cast<std::size_t>(native::SpriteId::Count)> silhouettes_{};
   std::array<UvRect, 8> terrain_{};
