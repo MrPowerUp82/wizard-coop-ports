@@ -5,6 +5,7 @@ Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Ninte
 - **Nova arte de abertura:** tela de título ilustrada em Switch, PS Vita, PSP, Windows e Linux; imagem própria de 480×272 no PSP.
 - **Créditos no jogo:** Guilherme de Lucca Moraes e Luis Paula Alves aparecem como colaboradores de ideias e sugestões, inclusive na tela compacta do PSP.
 - **Banner do projeto:** a arte promocional aparece no README do port nativo.
+- **Correção no PSP:** com a nova arte de abertura, textos e ícones do menu apareciam como retângulos sólidos e a imagem de fundo ficava encolhida. A arte agora é desenhada pelo mesmo caminho de geometria do resto da interface, numa textura de 512×512.
 
 ## Correções da v0.9.2
 

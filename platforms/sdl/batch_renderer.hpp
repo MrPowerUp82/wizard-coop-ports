@@ -101,6 +101,7 @@ private:
   SDL_Renderer* renderer_{};
   SDL_Texture* texture_{};
   SDL_Texture* title_{};
+  float titleU_{1}, titleV_{1}; // title image extent inside its power-of-two texture
   std::array<UvRect, static_cast<std::size_t>(native::SpriteId::Count)> sprites_{};
   std::array<UvRect, static_cast<std::size_t>(native::SpriteId::Count)> silhouettes_{};
   std::array<UvRect, 8> terrain_{};

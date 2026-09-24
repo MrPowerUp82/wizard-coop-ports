@@ -176,15 +176,45 @@ void BatchRenderer::shutdown() {
 
 bool BatchRenderer::loadTitle(SDL_Surface* title) {
   if (title_) SDL_DestroyTexture(title_);
-  title_ = title ? SDL_CreateTextureFromSurface(renderer_, title) : nullptr;
+  title_ = nullptr;
+  if (!title) return false;
+  // Padded to power-of-two sides like the atlas sheet: SDL2's PSP geometry path samples UVs against the
+  // GU's power-of-two texture size, so a 480x272 texture showed shrunk into the top-left corner.
+  SDL_Surface* padded = SDL_CreateRGBSurfaceWithFormat(0, nextPow2(title->w), nextPow2(title->h), 32, SDL_PIXELFORMAT_ABGR8888);
+  if (!padded) return false;
+  SDL_FillRect(padded, nullptr, 0);
+  SDL_SetSurfaceBlendMode(title, SDL_BLENDMODE_NONE);
+  SDL_BlitSurface(title, nullptr, padded, nullptr);
+  titleU_ = static_cast<float>(title->w) / padded->w;
+  titleV_ = static_cast<float>(title->h) / padded->h;
+  title_ = SDL_CreateTextureFromSurface(renderer_, padded);
+  SDL_FreeSurface(padded);
+  if (title_) SDL_SetTextureScaleMode(title_, SDL_ScaleModeLinear);
   return title_ != nullptr;
 }
 
 bool BatchRenderer::titleBackground(float width, float height) {
   if (!title_) return false;
   flush();
-  const SDL_Rect dst{0, 0, static_cast<int>(width), static_cast<int>(height)};
-  if (SDL_RenderCopy(renderer_, title_, nullptr, &dst) != 0) return false;
+  // Geometry, not SDL_RenderCopy: on SDL2's PSP backend a COPY records the title as the current GU
+  // texture, and the next textured RenderGeometry (which reports texture=NULL to the blend-state
+  // cache) then calls sceGuDisable(GU_TEXTURE_2D) — every glyph and sprite after it became a solid box.
+  // Narrow vertical strips, like SDL's own COPY path: the GU drops parts of screen-sized textured triangles.
+  constexpr int kStrips = 16;
+  const SDL_Color white{255, 255, 255, 255};
+  SDL_Vertex quad[kStrips * 4];
+  int idx[kStrips * 6];
+  for (int i = 0; i < kStrips; ++i) {
+    const float f0 = static_cast<float>(i) / kStrips, f1 = static_cast<float>(i + 1) / kStrips;
+    const float x0 = width * f0, x1 = width * f1, u0 = titleU_ * f0, u1 = titleU_ * f1;
+    quad[i * 4 + 0] = {{x0, 0}, white, {u0, 0}};
+    quad[i * 4 + 1] = {{x1, 0}, white, {u1, 0}};
+    quad[i * 4 + 2] = {{x1, height}, white, {u1, titleV_}};
+    quad[i * 4 + 3] = {{x0, height}, white, {u0, titleV_}};
+    const int b = i * 4, tri[6] = {b, b + 1, b + 2, b, b + 2, b + 3};
+    std::copy(tri, tri + 6, idx + i * 6);
+  }
+  if (SDL_RenderGeometry(renderer_, title_, quad, kStrips * 4, idx, kStrips * 6) != 0) return false;
   ++stats_.drawCalls;
   return true;
 }
