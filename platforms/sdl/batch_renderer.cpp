@@ -389,6 +389,7 @@ void BatchRenderer::rect(float x, float y, float w, float h, std::uint32_t color
 
 void BatchRenderer::rectGradient(float x, float y, float w, float h, std::uint32_t tl, std::uint32_t tr, std::uint32_t br, std::uint32_t bl) {
   if (w <= 0 || h <= 0) return;
+  selectTexture(texture_); // solid shapes use the atlas white texel, never an animation page
   reserve(4, 6);
   const int base = static_cast<int>(vertices_.size());
   const SDL_FPoint uv{white_.u0, white_.v0};
@@ -417,6 +418,7 @@ void BatchRenderer::line(float x1, float y1, float x2, float y2, float width, st
 
 void BatchRenderer::quadGradient(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3,
                                  std::uint32_t c0, std::uint32_t c1, std::uint32_t c2, std::uint32_t c3) {
+  selectTexture(texture_); // solid shapes use the atlas white texel, never an animation page
   reserve(4, 6);
   const int base = static_cast<int>(vertices_.size());
   const SDL_FPoint uv{white_.u0, white_.v0};
@@ -438,6 +440,7 @@ void BatchRenderer::lineGradient(float x1, float y1, float x2, float y2, float w
 void BatchRenderer::triangle(float x0, float y0, float x1, float y1, float x2, float y2, std::uint32_t color) {
   const SDL_Color c = unpack(color);
   if (c.a == 0) return;
+  selectTexture(texture_); // solid shapes use the atlas white texel, never an animation page
   reserve(3, 3);
   const int base = static_cast<int>(vertices_.size());
   const SDL_FPoint uv{white_.u0, white_.v0};
@@ -466,6 +469,7 @@ void BatchRenderer::ring(float x, float y, float rx, float ry, float a0, float a
   fastSinCos(step, ss, cs);
   auto advance = [&] { const float n = ca * cs - sa * ss; sa = sa * cs + ca * ss; ca = n; };
   if (thickness <= 0) { // filled disc / ellipse / pie
+    selectTexture(texture_); // solid shapes use the atlas white texel, never an animation page
     reserve(points + 1, segments * 3);
     const int center = static_cast<int>(vertices_.size());
     vertices_.push_back({tx(x, y), c, uv});
@@ -477,6 +481,7 @@ void BatchRenderer::ring(float x, float y, float rx, float ry, float a0, float a
     return;
   }
   const float half = thickness * 0.5f;
+  selectTexture(texture_); // solid shapes use the atlas white texel, never an animation page
   reserve(points * 2, segments * 6);
   const int base = static_cast<int>(vertices_.size());
   for (int i = 0; i < points; ++i, advance()) {
@@ -560,6 +565,7 @@ void BatchRenderer::fill(std::uint32_t color) {
   float cx = 0, cy = 0;
   for (const auto& p : path_) { cx += p.x; cy += p.y; }
   cx /= static_cast<float>(n); cy /= static_cast<float>(n);
+  selectTexture(texture_); // solid shapes use the atlas white texel, never an animation page
   reserve(static_cast<int>(n) + 1, static_cast<int>(n) * 3);
   const SDL_FPoint uv{white_.u0, white_.v0};
   const int center = static_cast<int>(vertices_.size());
