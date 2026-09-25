@@ -18,6 +18,14 @@ constexpr float kTerrainTile = 256.0f;
 
 int nextPow2(int v) { int p = 1; while (p < v) p <<= 1; return p; }
 
+int animationSlot(native::SpriteId id) {
+  if (id <= native::SpriteId::Umbra) return static_cast<int>(id);
+  if (id == native::SpriteId::PlayerDeveloper) return 26;
+  if (id == native::SpriteId::PlayerAurora) return 27;
+  if (id == native::SpriteId::PlayerGod) return 28;
+  return -1;
+}
+
 // Decodes one UTF-8 codepoint and advances `i`. Invalid bytes become '?'.
 std::uint32_t decodeUtf8(std::string_view s, std::size_t& i) {
   const auto c = static_cast<unsigned char>(s[i++]);
@@ -167,7 +175,27 @@ bool BatchRenderer::init(SDL_Renderer* renderer, SDL_Surface* atlas, int cell, i
   return true;
 }
 
+bool BatchRenderer::loadAnimations(const std::array<SDL_Surface*, 3>& pages, int frameCell, std::string& error) {
+  if (frameCell != 32 && frameCell != 64) { error = "invalid animation cell size"; return false; }
+  const int required = frameCell == 32 ? 3 : 1;
+  for (int i = 0; i < required; ++i) {
+    if (!pages[i] || pages[i]->w != (frameCell == 32 ? 512 : 2048) || pages[i]->h != (frameCell == 32 ? 512 : 2048)) {
+      error = "missing or invalid animation atlas page " + std::to_string(i);
+      return false;
+    }
+    animationPages_[i] = SDL_CreateTextureFromSurface(renderer_, pages[i]);
+    if (!animationPages_[i]) { error = SDL_GetError(); return false; }
+    SDL_SetTextureBlendMode(animationPages_[i], SDL_BLENDMODE_BLEND);
+    SDL_SetTextureScaleMode(animationPages_[i], SDL_ScaleModeLinear);
+  }
+  animationCell_ = frameCell;
+  animationPerRow_ = frameCell == 32 ? 4 : 8;
+  animationPerPage_ = frameCell == 32 ? 12 : 32;
+  return true;
+}
+
 void BatchRenderer::shutdown() {
+  for (auto& page : animationPages_) { if (page) SDL_DestroyTexture(page); page = nullptr; }
   if (title_) SDL_DestroyTexture(title_);
   title_ = nullptr;
   if (texture_) SDL_DestroyTexture(texture_);
@@ -225,6 +253,7 @@ void BatchRenderer::begin() {
   stats_ = {};
   resetTransform();
   additive_ = false;
+  activeTexture_ = texture_;
   SDL_SetTextureBlendMode(texture_, SDL_BLENDMODE_BLEND);
 #if defined(__PSP__) || defined(PSP)
   // SDL2's PSP backend (2.32) activates the texture for textured RenderGeometry but never enables
@@ -238,7 +267,7 @@ void BatchRenderer::begin() {
 
 void BatchRenderer::flush() {
   if (indices_.empty()) return;
-  SDL_RenderGeometry(renderer_, texture_, vertices_.data(), static_cast<int>(vertices_.size()), indices_.data(), static_cast<int>(indices_.size()));
+  SDL_RenderGeometry(renderer_, activeTexture_, vertices_.data(), static_cast<int>(vertices_.size()), indices_.data(), static_cast<int>(indices_.size()));
   ++stats_.drawCalls;
   stats_.vertices += static_cast<int>(vertices_.size());
   vertices_.clear();
@@ -249,15 +278,23 @@ void BatchRenderer::setAdditive(bool additive) {
   if (additive == additive_) return;
   flush(); // SDL captures the texture blend mode when the geometry command is queued
   additive_ = additive;
-  SDL_SetTextureBlendMode(texture_, additive ? SDL_BLENDMODE_ADD : SDL_BLENDMODE_BLEND);
+  SDL_SetTextureBlendMode(activeTexture_, additive ? SDL_BLENDMODE_ADD : SDL_BLENDMODE_BLEND);
+}
+
+void BatchRenderer::selectTexture(SDL_Texture* target) {
+  if (activeTexture_ == target) return;
+  flush();
+  activeTexture_ = target;
+  SDL_SetTextureBlendMode(target, additive_ ? SDL_BLENDMODE_ADD : SDL_BLENDMODE_BLEND);
 }
 
 void BatchRenderer::reserve(int vertices, int indices) {
   if (static_cast<int>(vertices_.size()) + vertices > kMaxVertices || static_cast<int>(indices_.size()) + indices > kMaxIndices) flush();
 }
 
-void BatchRenderer::rawQuad(const SDL_FPoint (&p)[4], const UvRect& uv, SDL_Color color) {
+void BatchRenderer::rawQuad(const SDL_FPoint (&p)[4], const UvRect& uv, SDL_Color color, SDL_Texture* target) {
   if (color.a == 0) return;
+  selectTexture(target ? target : texture_);
   reserve(4, 6);
   const int base = static_cast<int>(vertices_.size());
   vertices_.push_back({p[0], color, {uv.u0, uv.v0}});
@@ -289,6 +326,45 @@ void BatchRenderer::sprite(native::SpriteId id, float x, float y, float size, fl
   }
   rawQuad(p, sprites_[index], unpack(tint, alpha));
   if (flash > 0 && hasSilhouettes_) rawQuad(p, silhouettes_[index], unpack(0xffffffffu, alpha * std::min(1.0f, flash) * 0.6f));
+}
+
+void BatchRenderer::animated(native::SpriteId id, float x, float y, float size, int row, int frame, float rotation, float alpha,
+                              float sx, float sy, float flash, std::uint32_t tint) {
+  const int slot = animationSlot(id);
+  if (slot < 0 || animationCell_ == 0 || size <= 0 || alpha <= 0) {
+    sprite(id, x, y, size, rotation, alpha, sx, sy, flash, tint);
+    return;
+  }
+  const int page = slot / animationPerPage_;
+  SDL_Texture* target = animationPages_[page];
+  if (!target) { sprite(id, x, y, size, rotation, alpha, sx, sy, flash, tint); return; }
+  row = std::clamp(row, 0, 4);
+  frame = std::clamp(frame, 0, 3);
+  const int local = slot % animationPerPage_;
+  const int pixelX = (local % animationPerRow_ * 4 + frame) * animationCell_;
+  const int pixelY = (local / animationPerRow_ * 5 + row) * animationCell_;
+  const float pageSize = static_cast<float>(animationCell_ == 32 ? 512 : 2048);
+  const float halfPixel = 0.5f;
+  const UvRect uv{(pixelX + halfPixel) / pageSize, (pixelY + halfPixel) / pageSize,
+                  (pixelX + animationCell_ - halfPixel) / pageSize, (pixelY + animationCell_ - halfPixel) / pageSize};
+  const bool clean = id == native::SpriteId::Player0 || id == native::SpriteId::PlayerAurora ||
+                     id == native::SpriteId::Archon || id == native::SpriteId::Scorpion;
+  const float visualSize = size * (clean ? 1.0f : 116.0f / 128.0f) * (id == native::SpriteId::Player0 ? 1.25f : 1.0f);
+  const float yOffset = id == native::SpriteId::Player0 ? -size * 0.11f : 0.0f;
+  const float hx = visualSize * 0.5f * sx, hy = visualSize * 0.5f * sy;
+  SDL_FPoint p[4];
+  if (rotation == 0.0f) {
+    p[0] = tx(x - hx, y + yOffset - hy); p[1] = tx(x + hx, y + yOffset - hy);
+    p[2] = tx(x + hx, y + yOffset + hy); p[3] = tx(x - hx, y + yOffset + hy);
+  } else {
+    float s, c;
+    fastSinCos(rotation, s, c);
+    const float px[4] = {-hx, hx, hx, -hx}, py[4] = {-hy, -hy, hy, hy};
+    for (int i = 0; i < 4; ++i) p[i] = tx(x + px[i] * c - py[i] * s, y + yOffset + px[i] * s + py[i] * c);
+  }
+  const float shade = 1.0f - std::clamp(flash, 0.0f, 1.0f) * 0.28f;
+  const SDL_Color t = unpack(tint, alpha);
+  rawQuad(p, uv, SDL_Color{t.r, static_cast<Uint8>(t.g * shade), static_cast<Uint8>(t.b * shade), t.a}, target);
 }
 
 void BatchRenderer::sprite(const native::SpriteCommand& cmd) {

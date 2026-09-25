@@ -12,6 +12,6 @@ mksfoex -s CATEGORY=UG -s DISC_ID=ARCA90001 -s DISC_VERSION=1.00 -s APP_VER=00.9
 GAME=build-psp/ArcanaSurvivors
 rm -rf "$GAME"; mkdir -p "$GAME/assets/fonts"
 cp build-psp/EBOOT.PBP "$GAME/"
-cp assets/native_atlas_64.png assets/terrain_tiles_64.png assets/title_480.png "$GAME/assets/"
+cp assets/native_atlas_64.png assets/native_animations_32_*.png assets/terrain_tiles_64.png assets/title_480.png "$GAME/assets/"
 cp assets/fonts/DejaVuSans-Bold.ttf assets/fonts/DejaVu-LICENSE.txt "$GAME/assets/fonts/"
 ls -la "$GAME" "$GAME/assets"

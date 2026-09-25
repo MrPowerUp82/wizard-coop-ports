@@ -311,7 +311,8 @@ void drawEnemies(Frame& f) {
       b.beginPath(); b.lineTo(p0.x, p0.y); b.lineTo(p1.x, p1.y); b.lineTo(p2.x, p2.y); b.lineTo(p3.x, p3.y); b.stroke(2, hex(0xef7f78), true);
     }
     b.ellipse(x, y + size * 0.36f, size * 0.28f, size * 0.09f, rgba(0, 0, 0, static_cast<std::uint8_t>(pose.alpha * 0.24f * 255)));
-    b.sprite(sprite, x + pose.x, y + pose.y, size, pose.rotation, pose.alpha, pose.sx, pose.sy, std::max(pose.flash, e.windup > 0 ? 0.45f : 0.0f));
+    b.animated(sprite, x + pose.x, y + pose.y, size, pose.animationRow, pose.animationFrame,
+               pose.rotation, pose.alpha, pose.sx, pose.sy, std::max(pose.flash, e.windup > 0 ? 0.45f : 0.0f));
     if (e.windup > 0) b.textOutlined(x, y - size * 0.55f - 20, "!", 20, hex(0xff6b5e), rgba(10, 10, 16, 200), Align::Center);
     if (e.boss) continue;
     if (e.elite || e.hp < e.maxHp) {
@@ -388,7 +389,8 @@ void drawPlayers(Frame& f) {
       }
     }
     b.ellipse(x, y + 24, 19, 6, rgba(0, 0, 0, static_cast<std::uint8_t>(pose.alpha * 0.24f * 255)));
-    b.sprite(native::playerSprite(c), x + pose.x, y + pose.y, 68, pose.rotation, pose.alpha, pose.sx, pose.sy, pose.flash);
+    b.animated(native::playerSprite(c), x + pose.x, y + pose.y, 68, pose.animationRow, pose.animationFrame,
+               pose.rotation, pose.alpha, pose.sx, pose.sy, pose.flash);
     if (p.alive && c == GOD) {
       for (int n = 0; n < 2; ++n) {
         const double a = f.game.time * 2.5 + n * PI;

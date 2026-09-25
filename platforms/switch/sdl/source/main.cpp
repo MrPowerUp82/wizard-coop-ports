@@ -150,6 +150,9 @@ int main(int argc, char** argv) {
   BatchRenderer batch;
   std::string error;
   if (!batch.init(renderer, atlas, atlas->w / native::kAtlasColumns, native::kAtlasColumns, terrain, font, error)) { fatal("Falha ao preparar texturas", error.c_str()); return 1; }
+  std::array<SDL_Surface*, 3> animations{IMG_Load("romfs:/native_animations_64.png"), nullptr, nullptr};
+  if (!batch.loadAnimations(animations, 64, error)) { fatal("Falha ao preparar animacoes", error.c_str()); return 1; }
+  SDL_FreeSurface(animations[0]);
   if (SDL_Surface* title = IMG_Load("romfs:/title_1280.png")) { batch.loadTitle(title); SDL_FreeSurface(title); }
   SDL_FreeSurface(atlas);
   if (terrain) SDL_FreeSurface(terrain);

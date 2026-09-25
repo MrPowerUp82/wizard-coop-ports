@@ -37,7 +37,7 @@ for target in "${TARGETS[@]}"; do
       if run arcana-host tools/docker/host-build.sh; then
         mkdir -p dist/linux dist/linux/assets
         cp build-linux/arcana_desktop dist/linux/
-        cp assets/native_atlas_128.png assets/terrain_tiles.png assets/title_1280.png dist/linux/
+        cp assets/native_atlas_128.png assets/native_animations_64.png assets/terrain_tiles.png assets/title_1280.png dist/linux/
         cp assets/cacert.pem dist/linux/assets/
         mkdir -p dist/linux/fonts && cp assets/fonts/* dist/linux/fonts/
         RESULT[$target]="ok  dist/linux/arcana_desktop (testes passaram)"

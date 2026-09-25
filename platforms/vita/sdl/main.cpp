@@ -87,6 +87,9 @@ int main(int, char**) {
     sceKernelExitProcess(1);
     return 1;
   }
+  std::array<SDL_Surface*, 3> animations{IMG_Load("app0:/assets/native_animations_64.png"), nullptr, nullptr};
+  if (!batch.loadAnimations(animations, 64, error)) { SDL_Log("Animation atlas failed: %s", error.c_str()); sceKernelExitProcess(1); return 1; }
+  SDL_FreeSurface(animations[0]);
   if (SDL_Surface* title = IMG_Load("app0:/assets/title_1280.png")) { batch.loadTitle(title); SDL_FreeSurface(title); }
   SDL_FreeSurface(atlas);
   if (terrain) SDL_FreeSurface(terrain);

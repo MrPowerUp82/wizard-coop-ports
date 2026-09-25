@@ -36,6 +36,7 @@ public:
   // (64 px cells) and 64 px floor tiles, and drops the hit-flash silhouettes (flashes tint instead).
   bool init(SDL_Renderer* renderer, SDL_Surface* atlas, int cell, int cols, SDL_Surface* terrain, TTF_Font* font, std::string& error,
             bool compact = false);
+  bool loadAnimations(const std::array<SDL_Surface*, 3>& pages, int frameCell, std::string& error);
   bool loadTitle(SDL_Surface* title);
   bool titleBackground(float width, float height);
   void shutdown();
@@ -52,6 +53,10 @@ public:
   // --- primitives (all in current transform space) ---
   void sprite(native::SpriteId id, float x, float y, float size, float rotation = 0, float alpha = 1,
               float sx = 1, float sy = 1, float flash = 0, std::uint32_t tint = 0xffffffffu);
+  // One frame of an entity's animation sheet (row: idle, move, attack, interact, hurt). `tint` multiplies
+  // the texels; a near-black tint draws the Bestiário silhouettes.
+  void animated(native::SpriteId id, float x, float y, float size, int row, int frame, float rotation = 0, float alpha = 1,
+                float sx = 1, float sy = 1, float flash = 0, std::uint32_t tint = 0xffffffffu);
   void sprite(const native::SpriteCommand& cmd);
   void icon(native::SpriteId id, float x, float y, float size, std::uint32_t color = 0xffffffffu);
   void glow(float x, float y, float radius, std::uint32_t color, float alpha = 1);
@@ -92,7 +97,8 @@ private:
   struct Glyph { UvRect uv; float w{}, h{}, advance{}; bool valid{}; };
 
   void reserve(int vertices, int indices);
-  void rawQuad(const SDL_FPoint (&p)[4], const UvRect& uv, SDL_Color color);
+  void rawQuad(const SDL_FPoint (&p)[4], const UvRect& uv, SDL_Color color, SDL_Texture* target = nullptr);
+  void selectTexture(SDL_Texture* target);
   SDL_FPoint tx(float x, float y) const { return {x * scale_ + ox_, y * scale_ + oy_}; }
   static SDL_Color unpack(std::uint32_t c, float alpha = 1);
   const Glyph& glyph(std::uint32_t codepoint) const;
@@ -100,6 +106,9 @@ private:
 
   SDL_Renderer* renderer_{};
   SDL_Texture* texture_{};
+  SDL_Texture* activeTexture_{};
+  std::array<SDL_Texture*, 3> animationPages_{};
+  int animationCell_{}, animationPerRow_{}, animationPerPage_{};
   SDL_Texture* title_{};
   float titleU_{1}, titleV_{1}; // title image extent inside its power-of-two texture
   std::array<UvRect, static_cast<std::size_t>(native::SpriteId::Count)> sprites_{};

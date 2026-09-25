@@ -68,6 +68,7 @@ Args parseArgs(int argc, char** argv) {
     else if (k == "--no-save") a.noSave = true;
     else if (k == "--open-shop") a.frontend.openShop = true;
     else if (k == "--open-credits") a.frontend.openCredits = true;
+    else if (k == "--open-bestiary") a.frontend.openBestiary = true;
     else if (k == "--no-splash") a.frontend.splash = false;
     else if (k == "--psp") { a.psp = true; a.frontend.compact = true; a.width = 480; a.height = 272; }
     else if (k == "--audio-demo") a.audioDemo = next("audio-demo.wav");
@@ -279,6 +280,15 @@ int main(int argc, char** argv) {
   std::string error;
   const int cell = atlas->w / native::kAtlasColumns;
   if (!batch.init(renderer, atlas, cell, native::kAtlasColumns, terrain, font, error, args.psp)) { std::fprintf(stderr, "renderer init: %s\n", error.c_str()); return 1; }
+  std::array<SDL_Surface*, 3> animations{};
+  const int animationPages = args.psp ? 3 : 1;
+  for (int i = 0; i < animationPages; ++i) {
+    const std::string filename = args.psp ? "native_animations_32_" + std::to_string(i) + ".png" : "native_animations_64.png";
+    const std::string path = findAsset("", {filename});
+    animations[i] = path.empty() ? nullptr : IMG_Load(path.c_str());
+  }
+  if (!batch.loadAnimations(animations, args.psp ? 32 : 64, error)) { std::fprintf(stderr, "animations: %s\n", error.c_str()); return 1; }
+  for (auto* page : animations) if (page) SDL_FreeSurface(page);
   const std::string titlePath = findAsset("", {args.psp ? "title_480.png" : "title_1280.png"});
   SDL_Surface* title = titlePath.empty() ? nullptr : IMG_Load(titlePath.c_str());
   if (title) { batch.loadTitle(title); SDL_FreeSurface(title); }

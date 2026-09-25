@@ -19,7 +19,7 @@ cp dist/psp/arcana-survivors.cso "$out/$name-psp.cso"
 
 linux="dist/release/stage/$name-linux-x86_64"
 cp dist/linux/arcana_desktop "$linux/"
-cp assets/native_atlas_128.png assets/terrain_tiles.png assets/title_1280.png "$linux/assets/"
+cp assets/native_atlas_128.png assets/native_animations_64.png assets/terrain_tiles.png assets/title_1280.png "$linux/assets/"
 cp assets/fonts/* "$linux/assets/fonts/"
 cp assets/cacert.pem "$linux/assets/"
 cp THIRD_PARTY_NOTICES.txt "$linux/"

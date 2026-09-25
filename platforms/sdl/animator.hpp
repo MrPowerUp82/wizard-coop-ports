@@ -37,7 +37,7 @@ struct Effect {
 struct DamageNumber { float x{}, y{}, value{}, age{}, life{0.75f}; bool boss{}; std::uint32_t serial{}; };
 
 // `known` is false until the animator has seen the entity once (first frame): callers fall back.
-struct Pose { float x{}, y{}, rotation{}, sx{1}, sy{1}, alpha{1}, flash{}; native::SpriteId sprite{native::SpriteId::Unknown}; float size{}; bool known{}; };
+struct Pose { float x{}, y{}, rotation{}, sx{1}, sy{1}, alpha{1}, flash{}; int animationRow{}, animationFrame{}; native::SpriteId sprite{native::SpriteId::Unknown}; float size{}; bool known{}; };
 
 class Animator {
 public:
@@ -73,7 +73,8 @@ private:
     native::SpriteId sprite{native::SpriteId::Unknown};
     float size{64};
     std::uint32_t color{};
-    float seed{}, movedAt{-10}, dx{}, stride{}, walking{}, hit{}, cast{}, down{}, facing{1}, castAngle{}, trailAt{-1};
+    float seed{}, movedAt{-10}, dx{}, stride{}, walking{}, hit{}, cast{}, down{}, facing{1}, castAngle{}, trailAt{-1}, windup{};
+    bool interacting{};
     int castCount{}, level{1}, character{};
     double charge{}, bossCooldown{}, rangedCooldown{}, dashFor{};
     std::uint32_t seen{}, numberSerial{};

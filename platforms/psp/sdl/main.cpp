@@ -95,6 +95,11 @@ int main(int argc, char* argv[]) {
     SDL_Quit();
     return 1;
   }
+  std::array<SDL_Surface*, 3> animations{};
+  for (int i = 0; i < 3; ++i)
+    animations[i] = IMG_Load((assetsDir + "assets/native_animations_32_" + std::to_string(i) + ".png").c_str());
+  if (!batch.loadAnimations(animations, 32, error)) { SDL_Log("Animation atlas failed: %s", error.c_str()); SDL_Quit(); return 1; }
+  for (auto* page : animations) SDL_FreeSurface(page);
   if (SDL_Surface* title = IMG_Load((assetsDir + "assets/title_480.png").c_str())) { batch.loadTitle(title); SDL_FreeSurface(title); }
   SDL_FreeSurface(atlas);
   if (terrain) SDL_FreeSurface(terrain);

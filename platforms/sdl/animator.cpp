@@ -19,6 +19,17 @@ std::uint32_t element(int c) { return native::playerColor(c); }
 
 float sign(float v) { return v > 0 ? 1.0f : v < 0 ? -1.0f : 0.0f; }
 
+float facingNearestPlayer(const GameState& game, float x, float y, float fallback) {
+  float best = 1e30f, facing = fallback;
+  for (const auto& [_, p] : game.players) {
+    if (!p.alive) continue;
+    const float dx = static_cast<float>(p.x) - x, dy = static_cast<float>(p.y) - y;
+    const float distance = dx * dx + dy * dy;
+    if (distance < best) { best = distance; if (std::abs(dx) > 0.1f) facing = sign(dx); }
+  }
+  return facing;
+}
+
 bool floatingSprite(native::SpriteId id) {
   using S = native::SpriteId;
   return id == S::Wraith || id == S::Eye || id == S::Bat || id == S::Lich || id == S::Revenant || id == S::Seer ||
@@ -317,12 +328,15 @@ void Animator::track(const GameState& game, const Player* player, const Enemy* e
       a.color = element(player->color); a.character = player->color; a.castCount = player->castCount;
       a.charge = player->specialCharge; a.level = player->level; a.dashFor = player->dashFor;
       a.sprite = native::playerSprite(player->color); a.size = 68;
+      a.interacting = player->reviveProgress > 0 || player->shopProgress > 0 || !player->pendingPowers.empty();
     } else {
       a.boss = enemy->boss; a.elite = enemy->elite;
       a.color = enemy->elite ? hex(0xffd36b) : hex(0xffbc86);
       a.bossCooldown = enemy->attackCooldown; a.rangedCooldown = enemy->rangedCooldown;
       a.sprite = native::spriteForEnemy(*enemy); a.size = enemySize(*enemy);
       a.floating = floatingSprite(a.sprite);
+      a.facing = facingNearestPlayer(game, ex, ey, 1);
+      a.windup = static_cast<float>(enemy->windup);
     }
     a.seen = stamp_;
     actors_.push_back(a);
@@ -351,6 +365,7 @@ void Animator::track(const GameState& game, const Player* player, const Enemy* e
   if (distance > 0.1f && alive && !game.over) {
     old->movedAt = time_; old->dx = sign(dxm);
     if (player && std::abs(dxm) > 0.1f) old->facing = sign(dxm);
+    if (!player && std::abs(dxm) > 0.1f) old->facing = sign(dxm);
   }
   old->walking += ((time_ - old->movedAt < 0.14f && alive && !game.over ? 1.0f : 0.0f) - old->walking) * std::min(1.0f, dt * 14);
   old->stride += dt * (player ? 13.0f : old->boss ? 6.0f : 11.0f) * old->walking;
@@ -366,6 +381,7 @@ void Animator::track(const GameState& game, const Player* player, const Enemy* e
   if (!alive && old->alive) burst(ex, ey, old->color, 8, 40);
   const bool cast = player ? player->castCount != old->castCount
                            : enemy->attackCooldown > old->bossCooldown || enemy->rangedCooldown > old->rangedCooldown;
+  if (!player && alive && (cast || enemy->windup > 0)) old->facing = facingNearestPlayer(game, ex, ey, old->facing);
   if (cast && alive) {
     old->cast = 1;
     old->castAngle = player ? static_cast<float>(player->castAngle) : 0.0f;
@@ -378,8 +394,13 @@ void Animator::track(const GameState& game, const Player* player, const Enemy* e
     motes(ex, ey, MoteShape::Star, hex(0xffe49b), 12, 70, 45, 1.1f, -100, 5, 2);
   }
   old->x = ex; old->y = ey; old->hp = hp; old->alive = alive;
-  if (player) { old->castCount = player->castCount; old->charge = player->specialCharge; old->level = player->level; old->dashFor = player->dashFor; }
-  else { old->bossCooldown = enemy->attackCooldown; old->rangedCooldown = enemy->rangedCooldown; }
+  if (player) {
+    old->castCount = player->castCount; old->charge = player->specialCharge; old->level = player->level; old->dashFor = player->dashFor;
+    old->interacting = player->reviveProgress > 0 || player->shopProgress > 0 || !player->pendingPowers.empty();
+  } else {
+    old->bossCooldown = enemy->attackCooldown; old->rangedCooldown = enemy->rangedCooldown;
+    old->windup = static_cast<float>(enemy->windup);
+  }
 }
 
 void Animator::update(const GameState& game, double dtIn, bool paused) {
@@ -474,6 +495,10 @@ Pose Animator::pose(std::uint64_t key) const {
   out.sy = 1 - breath * 0.015f - std::abs(step) * 0.035f - down * 0.18f - a->hit * 0.08f;
   out.alpha = 1 - down * 0.72f;
   out.flash = a->hit;
+  out.animationRow = a->hit > 0.35f ? 4 : a->interacting ? 3 : (a->cast > 0.15f || a->windup > 0) ? 2 : a->walking > 0.3f ? 1 : 0;
+  out.animationFrame = out.animationRow == 1 ? static_cast<int>(a->stride * 0.65f) & 3
+                     : out.animationRow == 2 ? std::min(3, static_cast<int>((1 - std::max(a->cast, std::min(1.0f, a->windup))) * 4))
+                     : static_cast<int>(time_ * (out.animationRow == 3 ? 5 : 3) + a->seed) & 3;
   out.sprite = a->sprite; out.size = a->size; out.known = true;
   return out;
 }
