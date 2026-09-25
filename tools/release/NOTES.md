@@ -1,6 +1,13 @@
 Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch**, **PS Vita** e **PSP**, com builds para Windows e Linux. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
 
-## Novidades da v0.9.3
+## Novidades da v0.10.0
+
+- **Sprites animados:** personagens e inimigos agora usam as mesmas folhas de animação da versão web, com quadros próprios de repouso, movimento, ataque, interação e dano. No Switch, Vita, Windows e Linux os quadros têm 64 px; no PSP, 32 px, em três texturas de 512×512.
+- **Espelhamento:** os inimigos se viram para o lado em que andam e, ao atacar, para o jogador mais próximo; os arcanistas se viram conforme o movimento.
+- **Bestiário:** nova opção no menu principal com os 30 heróis, criaturas e guardiões. Dá para escolher a animação exibida e espelhar os sprites. Quem ainda não foi encontrado aparece como silhueta com uma dica de onde procurar, e os heróis secretos se revelam ao serem desbloqueados.
+- **Mago azul:** a escala do sprite animado foi ajustada para ficar do tamanho dos outros magos, como na web.
+
+## Da v0.9.3
 
 - **Nova arte de abertura:** tela de título ilustrada em Switch, PS Vita, PSP, Windows e Linux; imagem própria de 480×272 no PSP.
 - **Créditos no jogo:** Guilherme de Lucca Moraes e Luis Paula Alves aparecem como colaboradores de ideias e sugestões, inclusive na tela compacta do PSP.
@@ -70,7 +77,7 @@ Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Ninte
 ## Destaques
 
 - **Sem JavaScript no gameplay.** A simulação (hordas, 6 fases, chefes, poderes, evoluções, combos, encontros, maldições, co-op com reviver) roda em C++20. Os containers têm capacidade fixa e o hot path não aloca memória depois do aquecimento.
-- **Renderer em lote:** sprites, formas, texto e chão saem de uma única textura, em ~6–8 chamadas de desenho por frame, mesmo com 180 inimigos na tela.
+- **Renderer em lote:** sprites, formas, texto e chão saem de poucas texturas (atlas geral e folhas de animação), em poucas chamadas de desenho por frame, mesmo com 180 inimigos na tela.
 - **Visual do cliente web portado:** chão em tiles por fase, atmosfera, animação dos personagens, efeito de cada especial (nova, meteoro, espinhos, lua e as variantes), raios, familiar, combos, convergência, números de dano, tremor e flash de tela.
 - **Áudio sintetizado:** os 31 efeitos e a trilha generativa (menu, horda, guardião, fúria, vitória, derrota), iguais aos do navegador, sem nenhum arquivo de áudio.
 - **Co-op local para até 4 jogadores** em tela compartilhada. No Switch, cada jogador pode usar um Joy-Con na horizontal, um par de Joy-Cons, o modo portátil ou um Pro Controller.
@@ -99,9 +106,10 @@ Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Ninte
 
 ## Limitações conhecidas
 
-- Ainda faltam o Códex, o desafio diário, as maldições e o multiplayer online nos consoles (Switch, Vita e PSP seguem com co-op local; o online está disponível no PC).
+- Do Códex, por enquanto só o Bestiário está nos ports; ainda faltam as demais abas, o desafio diário, as maldições e o multiplayer online nos consoles (Switch, Vita e PSP seguem com co-op local; o online está disponível no PC).
 - A orientação do analógico de um Joy-Con sozinho na horizontal ainda não foi validada em todos os firmwares. Se ele girar errado, avise na issue.
 - No PSP, o flash branco de dano virou uma tinta vermelha (falta espaço na textura de 512×512) e o co-op local não existe (o aparelho tem um controle só).
+- Os sprites animados foram testados no PPSSPP, Vita3K e Sudachi, ainda não em aparelhos reais. No Vita, a folha de animação ocupa cerca de 16 MB de memória de textura; se algo falhar ao abrir, avise na issue.
 - O build do Windows foi testado só sob Wine (não em Windows real); se algo falhar (janela, controle, som), avise na issue.
 - O volume segue o do navegador, que é baixo por projeto.
 
