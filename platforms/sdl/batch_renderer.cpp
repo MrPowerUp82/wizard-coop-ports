@@ -349,18 +349,22 @@ void BatchRenderer::animated(native::SpriteId id, float x, float y, float size, 
                   (pixelX + animationCell_ - halfPixel) / pageSize, (pixelY + animationCell_ - halfPixel) / pageSize};
   const bool clean = id == native::SpriteId::Player0 || id == native::SpriteId::PlayerAurora ||
                      id == native::SpriteId::Archon || id == native::SpriteId::Scorpion;
-  const float visualSize = size * (clean ? 1.0f : 116.0f / 128.0f) * (id == native::SpriteId::Player0 ? 1.25f : 1.0f);
-  const float yOffset = id == native::SpriteId::Player0 ? -size * 0.11f : 0.0f;
-  const float hx = visualSize * 0.5f * sx, hy = visualSize * 0.5f * sy;
+  // src/sprites.js BLUE_WIZARD_*: the blue wizard's sheet is drawn smaller and sits higher in its cells
+  // as the rows go on; these shifts (in sprite sizes, before mirroring) line him up with the others.
+  static constexpr float kBlueOffsetY[5] = {-0.15f, -0.15f, -0.07f, 0.02f, 0.07f};
+  const bool blue = id == native::SpriteId::Player0;
+  const float visualSize = size * (clean ? 1.0f : 116.0f / 128.0f) * (blue ? 1.25f : 1.0f);
+  const float ox = blue ? size * 0.025f : 0.0f, oy = blue ? size * kBlueOffsetY[row] : 0.0f;
+  const float half = visualSize * 0.5f;
+  const float px[4] = {(ox - half) * sx, (ox + half) * sx, (ox + half) * sx, (ox - half) * sx};
+  const float py[4] = {(oy - half) * sy, (oy - half) * sy, (oy + half) * sy, (oy + half) * sy};
   SDL_FPoint p[4];
   if (rotation == 0.0f) {
-    p[0] = tx(x - hx, y + yOffset - hy); p[1] = tx(x + hx, y + yOffset - hy);
-    p[2] = tx(x + hx, y + yOffset + hy); p[3] = tx(x - hx, y + yOffset + hy);
+    for (int i = 0; i < 4; ++i) p[i] = tx(x + px[i], y + py[i]);
   } else {
     float s, c;
     fastSinCos(rotation, s, c);
-    const float px[4] = {-hx, hx, hx, -hx}, py[4] = {-hy, -hy, hy, hy};
-    for (int i = 0; i < 4; ++i) p[i] = tx(x + px[i] * c - py[i] * s, y + yOffset + px[i] * s + py[i] * c);
+    for (int i = 0; i < 4; ++i) p[i] = tx(x + px[i] * c - py[i] * s, y + px[i] * s + py[i] * c);
   }
   const float shade = 1.0f - std::clamp(flash, 0.0f, 1.0f) * 0.28f;
   const SDL_Color t = unpack(tint, alpha);
