@@ -1,6 +1,10 @@
 Versão nativa em C++ do **Arcana Survivors** (antes *wizard-coop*) para **Nintendo Switch**, **PS Vita** e **PSP**, com builds para Windows e Linux. Ela substitui os ports em JavaScript (nx.js / QuickJS), que tinham quedas grandes de FPS.
 
-## Novidades da v0.10.0
+## Correções da v0.10.1
+
+- **Mago azul alinhado:** a folha dele fica mais alta no quadro a cada animação; agora cada animação tem o próprio ajuste, e ele fica na mesma linha e no mesmo centro dos outros magos em todas, inclusive no Bestiário.
+
+## Da v0.10.0
 
 - **Sprites animados:** personagens e inimigos agora usam as mesmas folhas de animação da versão web, com quadros próprios de repouso, movimento, ataque, interação e dano. No Switch, Vita, Windows e Linux os quadros têm 64 px; no PSP, 32 px, em três texturas de 512×512.
 - **Espelhamento:** os inimigos se viram para o lado em que andam e, ao atacar, para o jogador mais próximo; os arcanistas se viram conforme o movimento.
