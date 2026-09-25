@@ -58,6 +58,48 @@ constexpr const char* kCharacterSpecials[CHARACTER_COUNT] = {"Nova glacial", "Me
                                                              "Reescrever realidade", "Alvorada", "Big Bang"};
 constexpr int kSecretTaps = 7; // src/menu.js: seven taps on the title wake the Developer
 
+// src/bestiary.js BESTIARY. Heroes are known once unlocked; creatures and guardians once the Códex records
+// them (profile codex "enemies"/"bosses"). Until then they animate as silhouettes over `hint`.
+struct BestiaryEntry { const char* id; native::SpriteId sprite; const char* name; const char* detail; const char* hint; int group; int hero; float scale; };
+using S = native::SpriteId;
+constexpr BestiaryEntry kBestiary[] = {
+  {"", S::Player0, "Azul", "Personagem jogável", "", 0, 0, 1}, {"", S::Player1, "Vermelho", "Personagem jogável", "", 0, 1, 1},
+  {"", S::Player2, "Verde", "Personagem jogável", "", 0, 2, 1}, {"", S::Player3, "Roxo", "Personagem jogável", "", 0, 3, 1},
+  {"", S::PlayerDeveloper, "O Desenvolvedor", "Personagem jogável", "Um segredo guardado por quem criou o jogo", 0, DEVELOPER, 1},
+  {"", S::PlayerAurora, "Guardião da Aurora", "Personagem jogável", "Vença os seis reinos no modo Clássico", 0, AURORA, 1},
+  {"", S::PlayerGod, "The God", "Personagem jogável", "Compre por 60000 moedas no Grimório", 0, GOD, 1},
+  {"slime", S::Slime, "Lodo", "Bosque Desperto", "Encontre no Bosque Desperto", 1, -1, 1},
+  {"slimelet", S::Slime, "Lodinho", "Criatura invocada", "Encontre numa partida", 1, -1, 0.7f},
+  {"bat", S::Bat, "Morcego de brasa", "Abismo de Brasas", "Encontre no Abismo de Brasas", 1, -1, 1},
+  {"eye", S::Eye, "Olho gélido", "Cripta Glacial", "Encontre na Cripta Glacial", 1, -1, 1},
+  {"brute", S::Brute, "Golem de magma", "Abismo de Brasas", "Encontre no Abismo de Brasas", 1, -1, 1},
+  {"mushroom", S::Mushroom, "Cogumelo", "Bosque Desperto", "Encontre no Bosque Desperto", 1, -1, 1},
+  {"beetle", S::Beetle, "Besouro de espinhos", "Bosque Desperto", "Encontre no Bosque Desperto", 1, -1, 1},
+  {"skeleton", S::Skeleton, "Esqueleto", "Cripta Glacial", "Encontre na Cripta Glacial", 1, -1, 1},
+  {"wraith", S::Wraith, "Espectro", "Cripta Glacial", "Encontre na Cripta Glacial", 1, -1, 1},
+  {"imp", S::Imp, "Diabrete", "Abismo de Brasas", "Encontre no Abismo de Brasas", 1, -1, 1},
+  {"scorpion", S::Scorpion, "Escorpião", "Abismo de Brasas", "Encontre no Abismo de Brasas", 1, -1, 1},
+  {"spore", S::Spore, "Esporo espectral", "Pântano Espectral", "Encontre no Pântano Espectral", 1, -1, 1},
+  {"revenant", S::Revenant, "Alma do brejo", "Pântano Espectral", "Encontre no Pântano Espectral", 1, -1, 1},
+  {"sentinel", S::Sentinel, "Sentinela solar", "Cidadela Astral", "Encontre na Cidadela Astral", 1, -1, 1},
+  {"seer", S::Seer, "Oráculo astral", "Cidadela Astral", "Encontre na Cidadela Astral", 1, -1, 1},
+  {"voidling", S::Voidling, "Asa do vazio", "Eclipse do Vazio", "Encontre no Eclipse do Vazio", 1, -1, 1},
+  {"voidscarab", S::VoidScarab, "Escaravelho do eclipse", "Eclipse do Vazio", "Encontre no Eclipse do Vazio", 1, -1, 1},
+  {"treant", S::Treant, "Raiz Ancestral", "Bosque Desperto", "Derrote o guardião do Bosque Desperto", 2, -1, 1},
+  {"lich", S::Lich, "Rei do Inverno", "Cripta Glacial", "Derrote o guardião da Cripta Glacial", 2, -1, 1},
+  {"demon", S::Demon, "Coração da Caldeira", "Abismo de Brasas", "Derrote o guardião do Abismo de Brasas", 2, -1, 1},
+  {"bogwarden", S::BogWarden, "Matriarca do Brejo", "Pântano Espectral", "Derrote o guardião do Pântano Espectral", 2, -1, 1},
+  {"archon", S::Archon, "Arconte Solar", "Cidadela Astral", "Derrote o guardião da Cidadela Astral", 2, -1, 1},
+  {"umbra", S::Umbra, "Soberano do Eclipse", "Eclipse do Vazio", "Derrote o guardião do Eclipse do Vazio", 2, -1, 1},
+};
+constexpr int kBestiaryCount = static_cast<int>(std::size(kBestiary));
+// Grid rows as {first entry, count}: heroes, creatures (two rows), guardians.
+struct BestiaryRow { int first, count; };
+constexpr BestiaryRow kBestiaryRows[] = {{0, 7}, {7, 9}, {16, 8}, {24, 6}};
+constexpr int kBestiaryColumns = 9;
+constexpr const char* kBestiaryGroups[] = {"Heróis", "Criaturas", "Guardiões"};
+constexpr const char* kBestiaryActions[] = {"Parado", "Movimento", "Ataque", "Interação", "Dano"};
+
 struct PowerText { const char* id; const char* desc; };
 constexpr PowerText kPowerText[] = {
   {"arcane", "+25% de dano mágico"}, {"haste", "Ataques 12% mais rápidos"},
@@ -191,6 +233,7 @@ Frontend::Frontend(FrontendOptions options) : options_(std::move(options)) {
   character_ = options_.characters;  if (options_.startImmediately || options_.autoplay) startRun();
   else if (options_.openShop) screen_ = Screen::Shop;
   else if (options_.openCredits) screen_ = Screen::Credits;
+  else if (options_.openBestiary) screen_ = Screen::Bestiary;
   else if (options_.splash) screen_ = Screen::Splash;
 }
 
@@ -291,6 +334,7 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
     case Screen::Credits:
       if (pressed(0, ActConfirm) || pressed(0, ActCancel) || pressed(0, ActPause)) { screen_ = Screen::Title; sfx(Sound::Click); }
       break;
+    case Screen::Bestiary: updateBestiary(); break;
     case Screen::Title:
       updateTitle();
       if (quitRequested_) return false;
@@ -316,14 +360,15 @@ bool Frontend::update(double frameSeconds, const InputFrame& rawInput) {
   return true;
 }
 
-native::StaticVector<Frontend::TitleItem, 8> Frontend::titleItems() const {
-  native::StaticVector<TitleItem, 8> items;
+native::StaticVector<Frontend::TitleItem, 10> Frontend::titleItems() const {
+  native::StaticVector<TitleItem, 10> items;
   items.push_back(TitleItem::Play);
   if (online_) items.push_back(TitleItem::Online);
   items.push_back(TitleItem::Campaign);
   if (unlocked("arsenal")) items.push_back(TitleItem::Weapon);
   if (unlocked("secondSpell")) items.push_back(TitleItem::Special);
   items.push_back(TitleItem::Shop);
+  items.push_back(TitleItem::Bestiary);
   items.push_back(TitleItem::Credits);
   items.push_back(TitleItem::Quit);
   return items;
@@ -380,6 +425,7 @@ void Frontend::updateTitle() {
     }
     case TitleItem::Special: special_ = 1 - special_; break;
     case TitleItem::Shop: screen_ = Screen::Shop; shopIndex_ = 0; respecArmed_ = false; break;
+    case TitleItem::Bestiary: screen_ = Screen::Bestiary; bestiaryIndex_ = 0; break;
     case TitleItem::Credits: screen_ = Screen::Credits; break;
     case TitleItem::Quit: quitRequested_ = true; break;
   }
@@ -803,6 +849,8 @@ void Frontend::render(BatchRenderer& batch, float width, float height) {
     renderTitle(batch, width, height);
   } else if (screen_ == Screen::Credits) {
     renderCredits(batch, width, height);
+  } else if (screen_ == Screen::Bestiary) {
+    renderBestiary(batch, width, height);
   } else if (screen_ == Screen::Shop) {
     renderShop(batch, width, height);
   } else if (screen_ == Screen::Online) {
@@ -1166,6 +1214,15 @@ void Frontend::renderTitle(BatchRenderer& b, float width, float height) {
         b.text(mx + 500 * s, y + vy, scratch_, 20 * s, kGold, Align::Right);
         if (sel) hint = "Melhorias permanentes compradas com as moedas das partidas.";
         break;
+      case TitleItem::Bestiary: {
+        b.text(mx + 20 * s, y + ty, "Bestiário", 24 * s, color);
+        int found = 0;
+        for (int i = 0; i < kBestiaryCount; ++i) found += bestiaryKnown(i);
+        std::snprintf(scratch_, sizeof scratch_, "%d/%d", found, kBestiaryCount);
+        b.text(mx + 500 * s, y + vy, scratch_, 20 * s, sel ? kGold : kMuted, Align::Right);
+        if (sel) hint = "Heróis, criaturas e guardiões que você já encontrou.";
+        break;
+      }
       case TitleItem::Credits: b.text(mx + 20 * s, y + ty, "Créditos", 24 * s, color); if (sel) hint = "Quem criou o Arcana Survivors."; break;
       case TitleItem::Quit: b.text(mx + 20 * s, y + ty, "Sair", 24 * s, color); break;
     }
@@ -1270,6 +1327,104 @@ void Frontend::renderCredits(BatchRenderer& b, float width, float height) {
   b.text(cx, y + (c ? 68 : 82) * s, "© 2026 MrPowerUp82 · Licença MIT", (c ? 14 : 16) * s, rgba(120, 130, 160), Align::Center);
   std::snprintf(scratch_, sizeof scratch_, "%s: voltar", options_.buttons.cancel);
   b.text(cx, height - (c ? 20 : 40) * s, scratch_, 15 * s, rgba(120, 130, 160), Align::Center);
+}
+
+bool Frontend::bestiaryKnown(int entry) const {
+  const auto& e = kBestiary[entry];
+  if (e.group == 0) {
+    return e.hero < STANDARD_CHARACTERS || (e.hero == DEVELOPER && profile_.unlocks.developer) ||
+           (e.hero == AURORA && profile_.unlocks.aurora) || (e.hero == GOD && profile_.unlocks.god);
+  }
+  const auto it = profile_.codex.find(e.group == 1 ? "enemies" : "bosses");
+  return it != profile_.codex.end() && it->second.contains(e.id);
+}
+
+void Frontend::updateBestiary() {
+  if (pressed(0, ActCancel) || pressed(0, ActPause)) { screen_ = Screen::Title; sfx(Sound::Click); return; }
+  int row = 0;
+  while (row < 3 && bestiaryIndex_ >= kBestiaryRows[row + 1].first) ++row;
+  const int rows = static_cast<int>(std::size(kBestiaryRows));
+  const int column = bestiaryIndex_ - kBestiaryRows[row].first;
+  auto moveRow = [&](int to) {
+    const auto& target = kBestiaryRows[(to + rows) % rows];
+    bestiaryIndex_ = target.first + std::min(column, target.count - 1);
+    sfx(Sound::Click);
+  };
+  if (pressed(0, ActUp)) moveRow(row - 1);
+  else if (pressed(0, ActDown)) moveRow(row + 1);
+  else if (pressed(0, ActLeft) || pressed(0, ActRight)) {
+    const int count = kBestiaryRows[row].count;
+    bestiaryIndex_ = kBestiaryRows[row].first + (column + (pressed(0, ActLeft) ? count - 1 : 1)) % count;
+    sfx(Sound::Click);
+  }
+  if (pressed(0, ActConfirm)) { bestiaryAction_ = (bestiaryAction_ + 1) % 5; sfx(Sound::Click); }
+  if (pressed(0, ActAlt)) { bestiaryMirror_ = !bestiaryMirror_; sfx(Sound::Click); }
+}
+
+void Frontend::renderBestiary(BatchRenderer& b, float width, float height) {
+  const float s = uiScale(height);
+  const bool c = options_.compact;
+  b.rect(0, 0, width, height, rgba(10, 10, 22));
+  std::array<int, 3> found{}, total{};
+  for (int i = 0; i < kBestiaryCount; ++i) { found[kBestiary[i].group] += bestiaryKnown(i); ++total[kBestiary[i].group]; }
+  b.text(width * 0.5f, (c ? 4 : 14) * s, "Bestiário", (c ? 30 : 44) * s, kGold, Align::Center);
+  std::snprintf(scratch_, sizeof scratch_, "%d/%d personagens e criaturas descobertos", found[0] + found[1] + found[2], kBestiaryCount);
+  b.text(width * 0.5f, (c ? 38 : 66) * s, scratch_, (c ? 15 : 20) * s, kMuted, Align::Center);
+
+  // Every entry plays the chosen action together; unknown ones as dark silhouettes.
+  const int frame = static_cast<int>(menuTime_ / 0.17) & 3;
+  const float mirror = bestiaryMirror_ ? -1.0f : 1.0f;
+  constexpr std::uint32_t kShadow = rgba(3, 6, 10);
+  auto figure = [&](int i, float x, float y, float size) {
+    const auto& e = kBestiary[i];
+    b.animated(e.sprite, x, y, size * e.scale, bestiaryAction_, frame, 0, 1, mirror, 1, 0, bestiaryKnown(i) ? 0xffffffffu : kShadow);
+  };
+
+  const float margin = (c ? 8 : 24) * s, top = (c ? 62 : 104) * s, bottom = height - (c ? 26 : 46) * s;
+  const float panelW = (c ? 220 : 380) * s, gridX = margin * 2 + panelW, gridW = width - gridX - margin;
+  const float headerH = (c ? 20 : 28) * s;
+  const float cell = std::min(gridW / kBestiaryColumns, (bottom - top - 3 * headerH) / 4);
+  float y = top;
+  for (int r = 0; r < 4; ++r) {
+    const auto& row = kBestiaryRows[r];
+    const int group = kBestiary[row.first].group;
+    if (r != 2) {
+      std::snprintf(scratch_, sizeof scratch_, "%s · %d/%d", kBestiaryGroups[group], found[group], total[group]);
+      b.text(gridX + 2 * s, y + 2 * s, scratch_, (c ? 15 : 18) * s, rgba(167, 234, 208));
+      y += headerH;
+    }
+    for (int col = 0; col < row.count; ++col) {
+      const int i = row.first + col;
+      const float x = gridX + static_cast<float>(col) * cell;
+      const bool sel = i == bestiaryIndex_, known = bestiaryKnown(i);
+      b.rect(x + 2 * s, y + 2 * s, cell - 4 * s, cell - 4 * s, sel ? rgba(40, 44, 80, 240) : known ? rgba(18, 24, 38, 230) : rgba(34, 44, 58, 220));
+      if (sel) b.frame(x + 2 * s, y + 2 * s, cell - 4 * s, cell - 4 * s, 2 * s, kGold);
+      figure(i, x + cell * 0.5f, y + cell * 0.5f, cell * 0.7f); // attack effects reach the frame edges
+    }
+    y += cell;
+  }
+
+  // Selected entry, large, with its name and where it lives (or how to find it).
+  const auto& e = kBestiary[bestiaryIndex_];
+  const bool known = bestiaryKnown(bestiaryIndex_);
+  const float px = margin, pw = panelW, ph = bottom - top;
+  b.rect(px, top, pw, ph, rgba(18, 20, 36, 225));
+  b.frame(px, top, pw, ph, 2 * s, known ? (e.group == 0 ? playerColor(e.hero) : rgba(167, 234, 208)) : rgba(60, 66, 92));
+  const float big = std::min(pw * 0.86f, ph * 0.58f);
+  b.glow(px + pw * 0.5f, top + big * 0.56f, big * 0.5f, known ? rgba(80, 150, 140) : rgba(60, 80, 100), 0.35f);
+  figure(bestiaryIndex_, px + pw * 0.5f, top + big * 0.56f, big * 0.72f);
+  float ty = top + big + (c ? 6 : 14) * s;
+  const char* name = known ? e.name : "???";
+  const float namePx = std::min((c ? 24.0f : 30.0f) * s, (c ? 24.0f : 30.0f) * s * (pw - 16 * s) / std::max(1.0f, b.textWidth(name, (c ? 24.0f : 30.0f) * s)));
+  b.text(px + pw * 0.5f, ty, name, namePx, known ? kText : kMuted, Align::Center);
+  ty += namePx + (c ? 6 : 10) * s;
+  ty += b.textWrapped(px + 10 * s, ty, pw - 20 * s, known ? e.detail : e.hint, (c ? 15 : 18) * s, known ? rgba(205, 212, 235) : kMuted, 3, Align::Center);
+  std::snprintf(scratch_, sizeof scratch_, "%s%s", kBestiaryActions[bestiaryAction_], bestiaryMirror_ ? " · espelhado" : "");
+  b.text(px + pw * 0.5f, top + ph - (c ? 22 : 32) * s, scratch_, (c ? 15 : 18) * s, kGold, Align::Center);
+
+  const auto& btn = options_.buttons;
+  std::snprintf(scratch_, sizeof scratch_, "Direcional: escolher · %s: animação · %s: espelhar · %s: voltar", btn.confirm, btn.alt, btn.cancel);
+  b.text(width * 0.5f, height - (c ? 20 : 34) * s, scratch_, 15 * s, rgba(120, 130, 160), Align::Center);
 }
 
 void Frontend::renderShop(BatchRenderer& b, float width, float height) {

@@ -39,7 +39,11 @@ fechar o jogo ou acabar a bateria no meio não corrompe o progresso, e reinstala
 - **Grimório (meta-progressão):** as moedas de cada partida compram os 15 upgrades permanentes do
   jogo web, incluindo os desbloqueios Arsenal (arma inicial), Segundo feitiço (especial alternativo)
   e Ritual infinito. Dá para redistribuir tudo e receber as moedas de volta.
-- **Visual do cliente web portado:** chão por fase, atmosfera, poses animadas, efeito de cada
+- **Bestiário:** os 30 personagens, criaturas e guardiões com as animações de repouso, movimento,
+  ataque, interação e dano (e espelhamento). Quem ainda não foi encontrado aparece como silhueta com
+  uma dica de onde procurar.
+- **Visual do cliente web portado:** chão por fase, atmosfera, sprites animados por folha de quadros
+  (parado, movimento, ataque, interação, dano) espelhados conforme a direção, poses, efeito de cada
   especial, raios, familiar, números de dano, tremor e flash de tela, avisos de eventos.
 - **Áudio sintetizado** como no navegador: 31 efeitos e trilha generativa que muda com o momento da
   partida (menu, horda, guardião, fúria, vitória, derrota). Nenhum arquivo de áudio.
@@ -166,6 +170,7 @@ mostrar a saída) tem opções para testar sem controle e sem tela:
 ./arcana_desktop --autoplay 2 --charged --characters 4,5  # bots com o Desenvolvedor e o Guardião
 ./arcana_desktop --psp                                     # prévia do PSP: 480x272, UI compacta
 ./arcana_desktop --open-shop --profile teste.ini           # abre direto no Grimório com outro save
+./arcana_desktop --open-bestiary                          # abre direto no Bestiário
 ./arcana_desktop --audio-demo demo.wav                     # grava todos os sons e músicas num WAV
 ./arcana_desktop --bench 60                                # benchmark headless
 ./arcana_desktop --server ws://localhost:8081              # online contra um servidor local do meu-game

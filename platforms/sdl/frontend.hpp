@@ -93,6 +93,7 @@ struct FrontendOptions {
   bool debugCharge{};   // autoplay: specials always charged (effects soak test)
   bool splash{true};    // developer seal before the title (never with autoplay/startImmediately/openShop)
   bool openCredits{};   // dev/screenshots: start on the credits screen
+  bool openBestiary{};  // dev/screenshots: start on the Bestiário
   bool startOnline{};   // open the online pages right away (--online-bot)
   std::array<int, cfg::MAX_PLAYERS> characters{0, 1, 2, 3}; // dev/screenshots: autoplay/--play picks (--characters)
   ButtonLabels buttons{};
@@ -133,8 +134,8 @@ public:
   [[nodiscard]] bool wantsTextInput() const;
 
 private:
-  enum class Screen { Splash, Title, Credits, Playing, Paused, Over, Shop, Online };
-  enum class TitleItem : std::uint8_t { Play, Online, Campaign, Weapon, Special, Shop, Credits, Quit };
+  enum class Screen { Splash, Title, Credits, Bestiary, Playing, Paused, Over, Shop, Online };
+  enum class TitleItem : std::uint8_t { Play, Online, Campaign, Weapon, Special, Shop, Bestiary, Credits, Quit };
 
   struct PadEdges { std::uint32_t pressed{}, held{}; };
 
@@ -148,7 +149,7 @@ private:
   float uiScale(float height) const { return height / 720.0f * (options_.compact ? 1.7f : 1.0f); }
   void updateShop();
   void renderShop(BatchRenderer& batch, float width, float height);
-  native::StaticVector<TitleItem, 8> titleItems() const;
+  native::StaticVector<TitleItem, 10> titleItems() const;
   bool unlocked(const char* id) const;
   void depositRun();
   void saveProfileNow();
@@ -181,6 +182,9 @@ private:
   void renderSplash(BatchRenderer& batch, float width, float height);
   void renderTitle(BatchRenderer& batch, float width, float height);
   void renderCredits(BatchRenderer& batch, float width, float height);
+  void updateBestiary();
+  void renderBestiary(BatchRenderer& batch, float width, float height);
+  bool bestiaryKnown(int entry) const;
   void renderPause(BatchRenderer& batch, float width, float height);
   void renderOver(BatchRenderer& batch, float width, float height);
   void renderPerf(BatchRenderer& batch, float width, float height);
@@ -228,6 +232,8 @@ private:
   bool auroraEarned_{};      // this run's result unlocked the Aurora Guardian
   int secretTaps_{};         // Alt presses on the title toward the Developer
   int shopIndex_{};
+  int bestiaryIndex_{}, bestiaryAction_{}; // selected entry; animation row shown (idle, move, attack, interact, hurt)
+  bool bestiaryMirror_{};
   bool respecArmed_{};
   bool quitRequested_{};
   int menuIndex_{0}, pauseIndex_{0}, choiceIndex_{0};
